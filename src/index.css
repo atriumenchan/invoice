@@ -250,11 +250,13 @@ body {
 }
 #invoice table.items td .desc {
   font-weight: 700;
+  white-space: pre-line;
 }
 #invoice table.items td .period {
   color: var(--muted);
   font-size: 10.5px;
   margin-top: 2px;
+  white-space: pre-line;
 }
 #invoice table.items td.right {
   text-align: right;
@@ -338,6 +340,7 @@ body {
   margin-bottom: 5px;
   padding-left: 18px;
   position: relative;
+  white-space: pre-line;
 }
 #invoice .notes-card li:before {
   content: '✓';

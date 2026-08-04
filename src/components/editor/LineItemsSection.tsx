@@ -5,7 +5,7 @@ import type { LineItem } from '../../types';
 import type { InvoiceApi } from '../../state/useInvoice';
 import { fmt2 } from '../../lib/calc';
 import { cn } from '../../lib/utils';
-import { Field } from './Field';
+import { Field, TextArea } from './Field';
 
 interface Props {
   items: LineItem[];
@@ -103,11 +103,12 @@ function ItemCard({
             className="overflow-hidden"
           >
             <div className="space-y-2.5 px-3 pb-3 pt-1">
-              <Field
+              <TextArea
                 label="Description"
                 value={item.desc}
                 onChange={(e) => ops.update(item.id, 'desc', e.target.value)}
                 placeholder="e.g. Marketing Services"
+                className="min-h-[44px]"
               />
               <Field
                 label="Service period (optional)"
