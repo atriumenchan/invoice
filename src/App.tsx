@@ -1,18 +1,36 @@
-import { useInvoice } from './state/useInvoice';
-import { EditorPanel } from './components/editor/EditorPanel';
-import InvoicePreview from './components/InvoicePreview';
+import type { ReactNode } from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
+import { AuthProvider, useAuth } from './state/AuthContext';
+import { supabaseConfigured } from './lib/supabase';
+import BuilderPage from './pages/BuilderPage';
+import DashboardPage from './pages/DashboardPage';
+import LoginPage from './pages/LoginPage';
+
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { session, loading } = useAuth();
+  if (!supabaseConfigured) return children;
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#F8FAFC]">
+        <Loader2 size={24} className="animate-spin text-brand" />
+      </div>
+    );
+  }
+  if (!session) return <Navigate to="/login" replace />;
+  return children;
+}
 
 export default function App() {
-  const inv = useInvoice();
-
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F8FAFC] max-md:flex-col">
-      <aside className="flex w-[400px] shrink-0 flex-col border-r border-[#E8ECF4] bg-[#F8FAFC] max-md:h-1/2 max-md:w-full max-md:border-b max-md:border-r-0">
-        <EditorPanel inv={inv} />
-      </aside>
-      <main className="flex flex-1 items-start justify-center overflow-auto bg-[#eef0f6] p-8">
-        <InvoicePreview ref={inv.previewRef} state={inv.state} />
-      </main>
-    </div>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<RequireAuth><BuilderPage /></RequireAuth>} />
+          <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

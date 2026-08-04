@@ -6,7 +6,7 @@ import type {
 } from 'react';
 import { cn } from '../../lib/utils';
 
-const inputCls =
+export const inputCls =
   'h-10 w-full rounded-lg border border-[#E8ECF4] bg-slate-50/60 px-3 text-[14px] text-slate-900 ' +
   'placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 ' +
   'focus:border-brand focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand/10';

@@ -9,7 +9,31 @@ export interface LineItem {
 
 export type SignMode = 'type' | 'upload';
 
+export type EntityRegion = 'IN' | 'UK' | 'US';
+
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'void';
+
+export interface CustomField {
+  id: string;
+  label: string;
+  value: string;
+}
+
+export interface Charge {
+  id: string;
+  label: string;
+  kind: 'percent' | 'flat';
+  value: number;
+}
+
 export interface InvoiceState {
+  invoiceId: string | null;
+  issuerId: string | null;
+  clientId: string | null;
+  bankId: string | null;
+  invPrefix: string;
+  status: InvoiceStatus;
+  entity: EntityRegion;
   docTitle: string;
   invNo: string;
   invDate: string;
@@ -17,16 +41,22 @@ export interface InvoiceState {
   currency: string;
   showBadge: boolean;
   badgeText: string;
+  showDueDate: boolean;
+  showBank: boolean;
+  showNotes: boolean;
+  showWords: boolean;
+  showSignature: boolean;
+  showFooter: boolean;
 
   taxEnabled: boolean;
-  gstLabel: string;
-  gstRate: number;
+  charges: Charge[];
 
   byName: string;
   bySub: string;
   byAddress: string;
   byGstin: string;
   bySac: string;
+  byCustom: CustomField[];
 
   toName: string;
   toAttn: string;
@@ -34,6 +64,7 @@ export interface InvoiceState {
   toEmail: string;
   toAddress: string;
   toGstin: string;
+  toCustom: CustomField[];
 
   items: LineItem[];
   notes: string[];
@@ -44,6 +75,7 @@ export interface InvoiceState {
   bankAcNo: string;
   bankIfsc: string;
   bankRef: string;
+  bankCustom: CustomField[];
 
   discount: number;
 

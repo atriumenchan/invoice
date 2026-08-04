@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import type { InvoiceState, LineItem } from '../types';
+import type { EntityRegion, InvoiceState, LineItem } from '../types';
 
-const STORAGE_KEY = 'admexo-invoice-v2';
+export const STORAGE_KEY = 'admexo-invoice-v2';
 
 const newItem = (): LineItem => ({
   id: crypto.randomUUID(),
@@ -15,6 +15,13 @@ const newItem = (): LineItem => ({
 });
 
 const DEFAULT_STATE: InvoiceState = {
+  invoiceId: null,
+  issuerId: null,
+  clientId: null,
+  bankId: null,
+  invPrefix: 'BG-IN',
+  status: 'draft',
+  entity: 'IN',
   docTitle: 'TAX INVOICE',
   invNo: '#ADS-APR26-001',
   invDate: '10 Apr 2026',
@@ -22,16 +29,22 @@ const DEFAULT_STATE: InvoiceState = {
   currency: 'INR',
   showBadge: true,
   badgeText: 'PAYMENT DUE IN 7 DAYS',
+  showDueDate: true,
+  showBank: true,
+  showNotes: true,
+  showWords: true,
+  showSignature: true,
+  showFooter: true,
 
   taxEnabled: true,
-  gstLabel: 'GST',
-  gstRate: 18,
+  charges: [{ id: 'gst', label: 'GST', kind: 'percent', value: 18 }],
 
   byName: 'Betelgeuse Global',
   bySub: 'ADMEXO',
   byAddress: '2101, E-Square, Sector 96, Noida, U.P. 201304, India',
   byGstin: '09CBJPM0018A1Z6',
   bySac: '998361',
+  byCustom: [],
 
   toName: 'Collegedunia Web Pvt Ltd',
   toAttn: 'Abhishek Agrawal',
@@ -39,6 +52,7 @@ const DEFAULT_STATE: InvoiceState = {
   toEmail: 'accounts@collegedunia.com',
   toAddress: '4th Floor, 418-419, AIHP Signature Tower, Udyog Vihar Phase IV, Gurugram, Haryana 122015',
   toGstin: '06AAFCC5173J1ZK',
+  toCustom: [],
 
   items: [
     { id: crypto.randomUUID(), desc: 'Marketing Services', period: 'Service period: March 2026', sac: '998361', qty: 1, rate: 30000 },
@@ -55,6 +69,7 @@ const DEFAULT_STATE: InvoiceState = {
   bankAcNo: '99998899114411',
   bankIfsc: 'HDFC0000088',
   bankRef: 'ADS-APR26-001',
+  bankCustom: [],
 
   discount: 0,
 
@@ -67,6 +82,12 @@ const DEFAULT_STATE: InvoiceState = {
   footCompany: 'ADMEXO',
   footRegions: 'USA | DUBAI | INDIA | UK',
   footWeb: 'admexo.com',
+};
+
+const ENTITY_PRESETS: Record<EntityRegion, Partial<InvoiceState>> = {
+  IN: { currency: 'INR', taxEnabled: true, charges: [{ id: 'gst', label: 'GST', kind: 'percent', value: 18 }] },
+  UK: { currency: 'GBP', taxEnabled: true, charges: [{ id: 'vat', label: 'VAT', kind: 'percent', value: 20 }] },
+  US: { currency: 'USD', taxEnabled: false, charges: [] },
 };
 
 function loadInitial(): InvoiceState {
@@ -91,6 +112,16 @@ export function useInvoice() {
 
   const update = useCallback(<K extends keyof InvoiceState>(key: K, value: InvoiceState[K]) => {
     setState((s) => ({ ...s, [key]: value }));
+    setDirty(true);
+  }, []);
+
+  const replaceState = useCallback((next: InvoiceState) => {
+    setState(next);
+    setDirty(true);
+  }, []);
+
+  const applyEntity = useCallback((entity: EntityRegion) => {
+    setState((s) => ({ ...s, entity, ...ENTITY_PRESETS[entity] }));
     setDirty(true);
   }, []);
 
@@ -184,6 +215,8 @@ export function useInvoice() {
   return {
     state,
     update,
+    replaceState,
+    applyEntity,
     items: { add: addItem, remove: removeItem, duplicate: duplicateItem, update: updateItem, reorder: reorderItems },
     notes: { add: addNote, remove: removeNote, update: updateNote },
     dirty,

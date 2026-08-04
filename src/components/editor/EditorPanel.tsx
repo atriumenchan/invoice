@@ -1,29 +1,175 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import * as Accordion from '@radix-ui/react-accordion';
 import {
   Building2,
   Download,
   FileText,
   Landmark,
+  LayoutDashboard,
   NotebookPen,
   Package,
   PenTool,
   Plus,
   Receipt,
+  Save,
   Settings,
   Trash2,
   User,
 } from 'lucide-react';
+import type { EntityRegion } from '../../types';
 import type { InvoiceApi } from '../../state/useInvoice';
 import { computeTotals, fmt2 } from '../../lib/calc';
+import { useAuth } from '../../state/AuthContext';
+import {
+  ensureDefaultIssuers,
+  listBanks,
+  listClients,
+  listIssuers,
+  saveBank,
+  saveClient,
+  saveInvoiceToCloud,
+  saveTemplate,
+  type BankRow,
+  type ClientRow,
+  type IssuerRow,
+} from '../../lib/db';
 import { SectionCard } from './SectionCard';
-import { Field, Switch, TextArea } from './Field';
+import { Field, Select, Switch, TextArea } from './Field';
 import { LineItemsSection } from './LineItemsSection';
 import { SignatureSection } from './SignatureSection';
+import { CustomFields } from './CustomFields';
+import { ChargesEditor } from './ChargesEditor';
 
 export function EditorPanel({ inv }: { inv: InvoiceApi }) {
-  const { state, update, items, notes, dirty, savedAt, saveNow, downloading, downloadPDF } = inv;
-  const { total, gstRate } = computeTotals(state);
+  const { state, update, applyEntity, items, notes, dirty, savedAt, saveNow, downloading, downloadPDF } = inv;
+  const { total } = computeTotals(state);
+  const { session } = useAuth();
+  const [issuers, setIssuers] = useState<IssuerRow[]>([]);
+  const [clients, setClients] = useState<ClientRow[]>([]);
+  const [banks, setBanks] = useState<BankRow[]>([]);
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudMsg, setCloudMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!session) return;
+    (async () => {
+      try {
+        setIssuers(await ensureDefaultIssuers());
+        setClients(await listClients());
+        setBanks(await listBanks());
+      } catch (e) {
+        console.error('Failed to load saved records', e);
+      }
+    })();
+  }, [session]);
+
+  const flash = (msg: string) => {
+    setCloudMsg(msg);
+    setTimeout(() => setCloudMsg(null), 4000);
+  };
+
+  const applyIssuer = (id: string) => {
+    const i = issuers.find((x) => x.id === id);
+    if (!i) {
+      update('issuerId', null);
+      return;
+    }
+    update('issuerId', i.id);
+    update('invPrefix', i.inv_prefix);
+    update('byName', i.name);
+    update('bySub', i.brand ?? '');
+    update('byAddress', i.address ?? '');
+    update('byGstin', i.tax_id ?? '');
+    update('bySac', i.sac_hsn ?? '');
+    update('byCustom', i.custom_fields ?? []);
+    update('footRegions', i.footer_regions ?? '');
+    update('footWeb', i.footer_web ?? '');
+    applyEntity(i.region);
+  };
+
+  const applyClient = (id: string) => {
+    if (!id) {
+      update('clientId', null);
+      return;
+    }
+    const c = clients.find((x) => x.id === id);
+    if (!c) return;
+    update('clientId', c.id);
+    update('toName', c.name);
+    update('toAttn', c.attn ?? '');
+    update('toPhone', c.phone ?? '');
+    update('toEmail', c.email ?? '');
+    update('toAddress', c.address ?? '');
+    update('toGstin', c.tax_id ?? '');
+    update('toCustom', c.custom_fields ?? []);
+  };
+
+  const applyBank = (id: string) => {
+    if (!id) {
+      update('bankId', null);
+      return;
+    }
+    const b = banks.find((x) => x.id === id);
+    if (!b) return;
+    update('bankId', b.id);
+    update('bankBenef', b.beneficiary ?? '');
+    update('bankName', b.bank_name ?? '');
+    update('bankAcType', b.account_type ?? '');
+    update('bankAcNo', b.account_no ?? '');
+    update('bankIfsc', b.ifsc_swift ?? '');
+    update('bankCustom', b.custom_fields ?? []);
+  };
+
+  const onSaveClient = async () => {
+    try {
+      const id = await saveClient(state);
+      update('clientId', id);
+      setClients(await listClients());
+      flash('Client saved');
+    } catch (e) {
+      alert('Could not save client: ' + (e as Error).message);
+    }
+  };
+
+  const onSaveBank = async () => {
+    try {
+      const id = await saveBank(state);
+      update('bankId', id);
+      setBanks(await listBanks());
+      flash('Bank account saved');
+    } catch (e) {
+      alert('Could not save bank account: ' + (e as Error).message);
+    }
+  };
+
+  const onSaveInvoice = async () => {
+    setCloudBusy(true);
+    try {
+      const { id, invoice_no } = await saveInvoiceToCloud(state);
+      update('invoiceId', id);
+      update('invNo', invoice_no);
+      flash(`Saved as ${invoice_no}`);
+    } catch (e) {
+      alert('Could not save invoice: ' + (e as Error).message);
+    } finally {
+      setCloudBusy(false);
+    }
+  };
+
+  const onSaveTemplate = async () => {
+    const name = window.prompt('Template name', `${state.byName || 'Invoice'} template`);
+    if (!name) return;
+    setCloudBusy(true);
+    try {
+      await saveTemplate(name, state);
+      flash(`Template “${name}” saved`);
+    } catch (e) {
+      alert('Could not save template: ' + (e as Error).message);
+    } finally {
+      setCloudBusy(false);
+    }
+  };
 
   /* keyboard shortcuts: Ctrl/Cmd+S save · Ctrl/Cmd+Enter download */
   useEffect(() => {
@@ -47,9 +193,18 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       {/* header */}
       <div className="border-b border-[#E8ECF4] px-4 pb-3.5 pt-4">
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-[16px] font-bold tracking-tight text-slate-900">Invoice Builder</h1>
-            <p className="mt-0.5 text-[12px] text-slate-500">Design invoices that get paid faster</p>
+          <div className="flex items-center gap-2.5">
+            <Link
+              to="/dashboard"
+              title="Open dashboard"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#E8ECF4] bg-white text-slate-500 shadow-sm transition-all duration-150 hover:border-brand hover:text-brand"
+            >
+              <LayoutDashboard size={16} />
+            </Link>
+            <div>
+              <h1 className="text-[16px] font-bold tracking-tight text-slate-900">Invoice Builder</h1>
+              <p className="mt-0.5 text-[12px] text-slate-500">Design invoices that get paid faster</p>
+            </div>
           </div>
           {dirty ? (
             <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-600">
@@ -67,7 +222,26 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       {/* scrollable sections */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <Accordion.Root type="multiple" defaultValue={['invoice', 'seller', 'items']} className="space-y-3">
-          <SectionCard value="invoice" icon={FileText} title="Invoice Details" description="Number, dates, currency & badge">
+          <SectionCard value="invoice" icon={FileText} title="Invoice Details" description="Entity, number, dates, currency & badge">
+            {session && issuers.length > 0 && (
+              <Select label="Issuer" value={state.issuerId ?? ''} onChange={(e) => applyIssuer(e.target.value)}>
+                <option value="">— Select issuer —</option>
+                {issuers.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.name} · {i.inv_prefix}
+                  </option>
+                ))}
+              </Select>
+            )}
+            <Select
+              label="Entity / Region"
+              value={state.entity}
+              onChange={(e) => applyEntity(e.target.value as EntityRegion)}
+            >
+              <option value="IN">India — GST · INR</option>
+              <option value="UK">United Kingdom — VAT · GBP</option>
+              <option value="US">United States — No tax · USD</option>
+            </Select>
             <Field label="Document title" value={state.docTitle} onChange={(e) => update('docTitle', e.target.value)} />
             <Field label="Invoice number" value={state.invNo} onChange={(e) => update('invNo', e.target.value)} />
             <div className="grid grid-cols-2 gap-2.5">
@@ -76,6 +250,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             </div>
             <Field label="Currency" value={state.currency} onChange={(e) => update('currency', e.target.value)} />
             <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
+              <Switch label="Show due date" checked={state.showDueDate} onChange={(v) => update('showDueDate', v)} />
               <Switch label="Payment-due badge" checked={state.showBadge} onChange={(v) => update('showBadge', v)} />
               {state.showBadge && (
                 <div className="px-1.5 pb-1.5">
@@ -95,9 +270,30 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
                 <Field label="SAC/HSN" value={state.bySac} onChange={(e) => update('bySac', e.target.value)} />
               </div>
             )}
+            <CustomFields fields={state.byCustom} onChange={(f) => update('byCustom', f)} />
           </SectionCard>
 
           <SectionCard value="client" icon={User} title="Client" description="Who is being billed">
+            {session && (
+              <div className="flex items-end gap-2">
+                <div className="min-w-0 flex-1">
+                  <Select label="Saved clients" value={state.clientId ?? ''} onChange={(e) => applyClient(e.target.value)}>
+                    <option value="">— New / manual —</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </Select>
+                </div>
+                <button
+                  type="button"
+                  onClick={onSaveClient}
+                  title="Save current details as a client"
+                  className="mb-0.5 inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-[#E8ECF4] bg-white px-3 text-[12px] font-semibold text-slate-600 transition-colors duration-150 hover:border-brand hover:text-brand"
+                >
+                  <Save size={13} /> Save
+                </button>
+              </div>
+            )}
             <Field label="Company name" value={state.toName} onChange={(e) => update('toName', e.target.value)} />
             <div className="grid grid-cols-2 gap-2.5">
               <Field label="Attn" value={state.toAttn} onChange={(e) => update('toAttn', e.target.value)} />
@@ -108,6 +304,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             {state.taxEnabled && (
               <Field label="GSTIN" value={state.toGstin} onChange={(e) => update('toGstin', e.target.value)} />
             )}
+            <CustomFields fields={state.toCustom} onChange={(f) => update('toCustom', f)} />
           </SectionCard>
 
           <SectionCard value="items" icon={Package} title="Line Items" description="Services & products being billed">
@@ -115,6 +312,29 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           </SectionCard>
 
           <SectionCard value="payment" icon={Landmark} title="Payment Details" description="Bank transfer information">
+            <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
+              <Switch label="Show bank details on invoice" checked={state.showBank} onChange={(v) => update('showBank', v)} />
+            </div>
+            {session && (
+              <div className="flex items-end gap-2">
+                <div className="min-w-0 flex-1">
+                  <Select label="Saved bank accounts" value={state.bankId ?? ''} onChange={(e) => applyBank(e.target.value)}>
+                    <option value="">— New / manual —</option>
+                    {banks.map((b) => (
+                      <option key={b.id} value={b.id}>{b.label || b.bank_name || 'Bank account'}</option>
+                    ))}
+                  </Select>
+                </div>
+                <button
+                  type="button"
+                  onClick={onSaveBank}
+                  title="Save current details as a bank account"
+                  className="mb-0.5 inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-[#E8ECF4] bg-white px-3 text-[12px] font-semibold text-slate-600 transition-colors duration-150 hover:border-brand hover:text-brand"
+                >
+                  <Save size={13} /> Save
+                </button>
+              </div>
+            )}
             <Field label="Beneficiary" value={state.bankBenef} onChange={(e) => update('bankBenef', e.target.value)} />
             <div className="grid grid-cols-2 gap-2.5">
               <Field label="Bank" value={state.bankName} onChange={(e) => update('bankName', e.target.value)} />
@@ -125,22 +345,22 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               <Field label="IFSC / SWIFT" value={state.bankIfsc} onChange={(e) => update('bankIfsc', e.target.value)} />
               <Field label="Payment ref" value={state.bankRef} onChange={(e) => update('bankRef', e.target.value)} />
             </div>
+            <CustomFields fields={state.bankCustom} onChange={(f) => update('bankCustom', f)} />
           </SectionCard>
 
-          <SectionCard value="taxes" icon={Receipt} title="Taxes" description="GST / SAC-HSN settings">
+          <SectionCard value="taxes" icon={Receipt} title="Taxes & Charges" description="Calculated into the payable total">
             <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
-              <Switch label="Include GST / SAC-HSN fields (India)" checked={state.taxEnabled} onChange={(v) => update('taxEnabled', v)} />
+              <Switch label="Show GSTIN / SAC-HSN tax fields" checked={state.taxEnabled} onChange={(v) => update('taxEnabled', v)} />
             </div>
-            {state.taxEnabled && (
-              <div className="grid grid-cols-2 gap-2.5">
-                <Field label="Tax label" value={state.gstLabel} onChange={(e) => update('gstLabel', e.target.value)} />
-                <Field label="Rate %" type="number" min={0} step={0.01} value={state.gstRate} onChange={(e) => update('gstRate', parseFloat(e.target.value) || 0)} />
-              </div>
-            )}
+            <ChargesEditor charges={state.charges} onChange={(c) => update('charges', c)} />
             <Field label="Discount amount" type="number" min={0} step={0.01} value={state.discount} onChange={(e) => update('discount', parseFloat(e.target.value) || 0)} />
           </SectionCard>
 
           <SectionCard value="notes" icon={NotebookPen} title="Notes" description="Payment terms shown on the invoice">
+            <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
+              <Switch label="Show notes on invoice" checked={state.showNotes} onChange={(v) => update('showNotes', v)} />
+              <Switch label="Show amount in words" checked={state.showWords} onChange={(v) => update('showWords', v)} />
+            </div>
             {state.notes.map((n, i) => (
               <div key={i} className="flex items-start gap-2">
                 <TextArea
@@ -164,10 +384,16 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           </SectionCard>
 
           <SectionCard value="signature" icon={PenTool} title="Signature" description="Type with a font or upload an image">
+            <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
+              <Switch label="Show signature on invoice" checked={state.showSignature} onChange={(v) => update('showSignature', v)} />
+            </div>
             <SignatureSection state={state} update={update} />
           </SectionCard>
 
           <SectionCard value="footer" icon={Settings} title="Footer" description="Company line at the page bottom">
+            <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
+              <Switch label="Show footer on invoice" checked={state.showFooter} onChange={(v) => update('showFooter', v)} />
+            </div>
             <Field label="Company" value={state.footCompany} onChange={(e) => update('footCompany', e.target.value)} />
             <Field label="Regions" value={state.footRegions} onChange={(e) => update('footRegions', e.target.value)} />
             <Field label="Website" value={state.footWeb} onChange={(e) => update('footWeb', e.target.value)} />
@@ -178,13 +404,38 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       {/* sticky download bar */}
       <div className="border-t border-[#E8ECF4] bg-white/90 px-4 py-3 backdrop-blur">
         <div className="mb-2.5 flex items-center justify-between">
-          <span className="text-[12px] font-medium text-slate-500">
-            Total{state.taxEnabled ? ` (incl. ${state.gstLabel} ${gstRate}%)` : ''}
-          </span>
+          <span className="text-[12px] font-medium text-slate-500">Total</span>
           <span className="text-[15px] font-bold tabular-nums text-slate-900">
             {state.currency} {fmt2(total)}
           </span>
         </div>
+        {session && (
+          <div className="mb-2.5 flex gap-2">
+            <button
+              type="button"
+              onClick={onSaveInvoice}
+              disabled={cloudBusy}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E8ECF4] bg-white py-2.5 text-[12.5px] font-bold text-slate-700 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.99] disabled:opacity-60"
+            >
+              <Save size={14} />
+              {cloudBusy ? 'Saving…' : state.invoiceId ? `Update ${state.invNo}` : 'Save invoice'}
+            </button>
+            <button
+              type="button"
+              onClick={onSaveTemplate}
+              disabled={cloudBusy}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E8ECF4] bg-white py-2.5 text-[12.5px] font-bold text-slate-700 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.99] disabled:opacity-60"
+            >
+              <Plus size={14} />
+              Save as template
+            </button>
+          </div>
+        )}
+        {cloudMsg && (
+          <p className="mb-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-center text-[12px] font-semibold text-emerald-600">
+            {cloudMsg}
+          </p>
+        )}
         <button
           type="button"
           onClick={downloadPDF}

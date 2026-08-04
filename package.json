@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.0",
+    "@supabase/supabase-js": "^2.112.0",
     "clsx": "^2.1.1",
     "framer-motion": "^11.3.24",
     "html2canvas": "^1.4.1",
@@ -17,6 +18,7 @@
     "lucide-react": "^0.427.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.2",
     "tailwind-merge": "^2.5.2"
   },
   "devDependencies": {

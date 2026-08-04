@@ -10,7 +10,7 @@ import { LOGO_DATA_URI } from '../assets/logo';
  */
 const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ state: s }, ref) => {
   const taxOn = s.taxEnabled;
-  const { subtotal, discount, gstRate, gstAmt, total } = computeTotals(s);
+  const { subtotal, discount, chargeRows, total } = computeTotals(s);
   const useSignImage = s.signMode === 'upload' && s.signImage;
 
   return (
@@ -28,9 +28,6 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
                 <span className="ad">AD</span>
                 <span className="mexo">MEXO</span>
               </div>
-            </div>
-            <div className="issued-by">
-              Issued by <b>{s.byName}</b>
             </div>
           </div>
           <div className="tax-title">
@@ -53,13 +50,15 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
             <div className="val">{s.invDate}</div>
           </div>
         </div>
-        <div className="m">
-          <div className="ic"><Clock size={15} /></div>
-          <div>
-            <div className="lbl">DUE DATE</div>
-            <div className="val">{s.dueDate}</div>
+        {s.showDueDate && (
+          <div className="m">
+            <div className="ic"><Clock size={15} /></div>
+            <div>
+              <div className="lbl">DUE DATE</div>
+              <div className="val">{s.dueDate}</div>
+            </div>
           </div>
-        </div>
+        )}
         <div className="m">
           <div className="ic"><Globe size={15} /></div>
           <div>
@@ -80,6 +79,14 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
               GSTIN: {s.byGstin} &nbsp; | &nbsp; SAC/HSN: {s.bySac}
             </p>
           )}
+          {s.byCustom.map(
+            (f) =>
+              (f.label || f.value) && (
+                <p className="gst" key={f.id}>
+                  {f.label}: {f.value}
+                </p>
+              )
+          )}
         </div>
         <div className="card">
           <div className="tag">BILLED TO</div>
@@ -90,6 +97,14 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
           <p>{s.toEmail}</p>
           <p style={{ whiteSpace: 'pre-line' }}>{s.toAddress}</p>
           {taxOn && <p className="gst">GSTIN: {s.toGstin}</p>}
+          {s.toCustom.map(
+            (f) =>
+              (f.label || f.value) && (
+                <p className="gst" key={f.id}>
+                  {f.label}: {f.value}
+                </p>
+              )
+          )}
         </div>
       </div>
 
@@ -126,6 +141,7 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
       <div className="items-note">All amounts are stated in {s.currency}.</div>
 
       <div className="bottom-cards">
+        {s.showBank && (
         <div className="card2">
           <h4>BANK TRANSFER DETAILS</h4>
           <div className="kv-row"><span className="k">BENEFICIARY</span><span>{s.bankBenef}</span></div>
@@ -134,17 +150,30 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
           <div className="kv-row"><span className="k">IFSC/SWIFT</span><span>{s.bankIfsc}</span></div>
           <div className="kv-row"><span className="k">ACCOUNT TYPE</span><span>{s.bankAcType}</span></div>
           <div className="kv-row"><span className="k">PAYMENT REF.</span><span>{s.bankRef}</span></div>
+          {s.bankCustom.map(
+            (f) =>
+              (f.label || f.value) && (
+                <div className="kv-row" key={f.id}>
+                  <span className="k">{f.label.toUpperCase()}</span>
+                  <span>{f.value}</span>
+                </div>
+              )
+          )}
         </div>
+        )}
         <div className="card2">
           <h4>INVOICE SUMMARY</h4>
           <div className="kv-row"><span className="k">Subtotal</span><span>{fmt2(subtotal)}</span></div>
           <div className="kv-row"><span className="k">Discount</span><span>{fmt2(discount)}</span></div>
-          {taxOn && (
-            <div className="kv-row">
-              <span className="k">{s.gstLabel} ({gstRate}%)</span>
-              <span>{fmt2(gstAmt)}</span>
+          {chargeRows.map((c) => (
+            <div className="kv-row" key={c.id}>
+              <span className="k">
+                {c.label}
+                {c.kind === 'percent' ? ` (${c.value}%)` : ''}
+              </span>
+              <span>{fmt2(c.amt)}</span>
             </div>
-          )}
+          ))}
           <div className="total-bar">
             <span className="lbl">TOTAL</span>
             <span className="val">{s.currency} {fmt2(total)}</span>
@@ -152,20 +181,26 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
         </div>
       </div>
 
-      <div className="notes-card">
-        <h4>PAYMENT TERMS &amp; NOTES</h4>
-        <ul>
-          {s.notes.map((n, i) => (
-            <li key={i}>{n}</li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="words-sign">
-        <div className="words-card">
-          <h4>AMOUNT IN WORDS</h4>
-          <div className="amt">{amountInWords(total, s.currency)}</div>
+      {s.showNotes && (
+        <div className="notes-card">
+          <h4>PAYMENT TERMS &amp; NOTES</h4>
+          <ul>
+            {s.notes.map((n, i) => (
+              <li key={i}>{n}</li>
+            ))}
+          </ul>
         </div>
+      )}
+
+      {(s.showWords || s.showSignature) && (
+      <div className="words-sign">
+        {s.showWords && (
+          <div className="words-card">
+            <h4>AMOUNT IN WORDS</h4>
+            <div className="amt">{amountInWords(total, s.currency)}</div>
+          </div>
+        )}
+        {s.showSignature && (
         <div className="sign-card">
           <div className="sig">
             {useSignImage ? (
@@ -178,16 +213,20 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
             {useSignImage ? `${s.signName}  |  ${s.signTitle}` : s.signTitle}
           </div>
         </div>
+        )}
       </div>
+      )}
 
-      <div className="foot">
-        <div>
-          <span className="fname">{s.footCompany}</span> &nbsp; <span>{s.footRegions}</span>
+      {s.showFooter && (
+        <div className="foot">
+          <div>
+            <span className="fname">{s.footCompany}</span> &nbsp; <span>{s.footRegions}</span>
+          </div>
+          <div>
+            <span>{s.footWeb}</span> &nbsp; Page 1 of 1
+          </div>
         </div>
-        <div>
-          <span>{s.footWeb}</span> &nbsp; Page 1 of 1
-        </div>
-      </div>
+      )}
     </div>
   );
 });

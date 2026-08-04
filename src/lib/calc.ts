@@ -1,4 +1,4 @@
-import type { InvoiceState } from '../types';
+import type { Charge, InvoiceState } from '../types';
 
 export function fmt2(n: number): string {
   return (Math.round(n * 100) / 100).toLocaleString(undefined, {
@@ -73,12 +73,16 @@ export function amountInWords(total: number, currency: string): string {
   return `${curName} ${words} Only.`;
 }
 
+export interface ChargeRow extends Charge {
+  amt: number;
+}
+
 export interface Totals {
   subtotal: number;
   discount: number;
   taxable: number;
-  gstRate: number;
-  gstAmt: number;
+  chargeRows: ChargeRow[];
+  chargesTotal: number;
   total: number;
 }
 
@@ -86,7 +90,10 @@ export function computeTotals(s: InvoiceState): Totals {
   const subtotal = s.items.reduce((sum, it) => sum + (it.qty || 0) * (it.rate || 0), 0);
   const discount = s.discount || 0;
   const taxable = subtotal - discount;
-  const gstRate = s.gstRate || 0;
-  const gstAmt = s.taxEnabled ? taxable * (gstRate / 100) : 0;
-  return { subtotal, discount, taxable, gstRate, gstAmt, total: taxable + gstAmt };
+  const chargeRows: ChargeRow[] = s.charges.map((c) => ({
+    ...c,
+    amt: c.kind === 'percent' ? taxable * ((c.value || 0) / 100) : c.value || 0,
+  }));
+  const chargesTotal = chargeRows.reduce((sum, c) => sum + c.amt, 0);
+  return { subtotal, discount, taxable, chargeRows, chargesTotal, total: taxable + chargesTotal };
 }
