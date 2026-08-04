@@ -14,13 +14,41 @@ body {
 }
 
 /* ===== editor shared bits ===== */
-.icon-btn {
-  @apply inline-flex items-center justify-center rounded-md p-1.5 text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-600;
-}
-.pill-add {
-  @apply inline-flex w-full items-center justify-center gap-2 rounded-full border border-dashed border-brand/40 bg-brand/5 py-2.5 text-[13px] font-semibold text-brand-deep transition-all duration-150 hover:bg-brand/10 active:scale-[0.99];
+@layer components {
+  .icon-btn {
+    @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-600;
+  }
+  .pill-add {
+    @apply inline-flex items-center gap-2 self-start rounded-full border border-brand/25 bg-brand/5 px-4 py-2 text-[13px] font-semibold text-brand-deep transition-all duration-150 hover:bg-brand/10 active:scale-[0.98];
+  }
 }
 
+@keyframes accDown {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+    opacity: 1;
+  }
+}
+@keyframes accUp {
+  from {
+    height: var(--radix-accordion-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+.acc-content[data-state='open'] {
+  animation: accDown 0.18s ease-out;
+}
+.acc-content[data-state='closed'] {
+  animation: accUp 0.18s ease-out;
+}
 /* Radix accordion expand animation */
 @keyframes accordion-down {
   from { height: 0; }

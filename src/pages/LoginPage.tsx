@@ -8,8 +8,8 @@ import { inputCls } from '../components/editor/Field';
 export default function LoginPage() {
   const { session, loading } = useAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
-  const [email, setEmail] = useState((import.meta.env.VITE_DEFAULT_LOGIN_EMAIL as string) ?? '');
-  const [password, setPassword] = useState((import.meta.env.VITE_DEFAULT_LOGIN_PASSWORD as string) ?? '');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);

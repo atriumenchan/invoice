@@ -9,20 +9,21 @@ import { Field, TextArea } from './Field';
 
 interface Props {
   items: LineItem[];
-  taxOn: boolean;
+  showSac: boolean;
+  showQty: boolean;
   currency: string;
   ops: InvoiceApi['items'];
 }
 
-export function LineItemsSection({ items, taxOn, currency, ops }: Props) {
+export function LineItemsSection({ items, showSac, showQty, currency, ops }: Props) {
   return (
     <div>
       <Reorder.Group axis="y" values={items} onReorder={ops.reorder} className="space-y-2.5">
-        <AnimatePresence initial={false}>
-          {items.map((item) => (
-            <ItemCard key={item.id} item={item} taxOn={taxOn} currency={currency} ops={ops} />
+        <div className="space-y-2.5">
+          {items.map((item, i) => (
+            <ItemCard key={item.id} item={item} showSac={showSac} showQty={showQty} currency={currency} ops={ops} />
           ))}
-        </AnimatePresence>
+        </div>
       </Reorder.Group>
       <button type="button" onClick={ops.add} className="pill-add mt-3">
         <Plus size={15} /> Add Line Item
@@ -33,18 +34,21 @@ export function LineItemsSection({ items, taxOn, currency, ops }: Props) {
 
 function ItemCard({
   item,
-  taxOn,
+  showSac,
+  showQty,
   currency,
   ops,
 }: {
   item: LineItem;
-  taxOn: boolean;
+  showSac: boolean;
+  showQty: boolean;
   currency: string;
   ops: InvoiceApi['items'];
 }) {
   const controls = useDragControls();
   const [open, setOpen] = useState(true);
-  const amount = (item.qty || 0) * (item.rate || 0);
+  const amount = (showQty ? item.qty || 0 : 1) * (item.rate || 0);
+  const numCols = 1 + (showSac ? 1 : 0) + (showQty ? 1 : 0);
 
   return (
     <Reorder.Item
@@ -116,24 +120,26 @@ function ItemCard({
                 onChange={(e) => ops.update(item.id, 'period', e.target.value)}
                 placeholder="e.g. Service period: March 2026"
               />
-              <div className={cn('grid gap-2', taxOn ? 'grid-cols-3' : 'grid-cols-2')}>
-                {taxOn && (
+              <div className={cn('grid gap-2', numCols === 3 ? 'grid-cols-3' : numCols === 2 ? 'grid-cols-2' : 'grid-cols-1')}>
+                {showSac && (
                   <Field
                     label="SAC/HSN"
                     value={item.sac}
                     onChange={(e) => ops.update(item.id, 'sac', e.target.value)}
                   />
                 )}
+                {showQty && (
+                  <Field
+                    label="Qty"
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={item.qty}
+                    onChange={(e) => ops.update(item.id, 'qty', parseFloat(e.target.value) || 0)}
+                  />
+                )}
                 <Field
-                  label="Qty"
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={item.qty}
-                  onChange={(e) => ops.update(item.id, 'qty', parseFloat(e.target.value) || 0)}
-                />
-                <Field
-                  label="Rate"
+                  label={showQty ? 'Rate' : 'Amount'}
                   type="number"
                   min={0}
                   step={0.01}

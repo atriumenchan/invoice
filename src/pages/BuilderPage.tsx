@@ -7,7 +7,7 @@ export default function BuilderPage() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC] max-md:flex-col">
-      <aside className="flex w-[400px] shrink-0 flex-col border-r border-[#E8ECF4] bg-[#F8FAFC] max-md:h-1/2 max-md:w-full max-md:border-b max-md:border-r-0">
+      <aside className="flex w-[400px] shrink-0 flex-col border-r border-[#E8ECF4] bg-gradient-to-b from-[#FAFBFD] to-[#F3F6FB] max-md:h-1/2 max-md:w-full max-md:border-b max-md:border-r-0">
         <EditorPanel inv={inv} />
       </aside>
       <main className="flex flex-1 items-start justify-center overflow-auto bg-[#eef0f6] p-8">

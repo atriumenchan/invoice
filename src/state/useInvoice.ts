@@ -36,7 +36,9 @@ const DEFAULT_STATE: InvoiceState = {
   showSignature: true,
   showFooter: true,
 
-  taxEnabled: true,
+  showGstin: true,
+  showSac: true,
+  showQty: true,
   charges: [{ id: 'gst', label: 'GST', kind: 'percent', value: 18 }],
 
   byName: 'Betelgeuse Global',
@@ -85,9 +87,9 @@ const DEFAULT_STATE: InvoiceState = {
 };
 
 const ENTITY_PRESETS: Record<EntityRegion, Partial<InvoiceState>> = {
-  IN: { currency: 'INR', taxEnabled: true, charges: [{ id: 'gst', label: 'GST', kind: 'percent', value: 18 }] },
-  UK: { currency: 'GBP', taxEnabled: true, charges: [{ id: 'vat', label: 'VAT', kind: 'percent', value: 20 }] },
-  US: { currency: 'USD', taxEnabled: false, charges: [] },
+  IN: { currency: 'INR', showGstin: true, showSac: true, charges: [{ id: 'gst', label: 'GST', kind: 'percent', value: 18 }] },
+  UK: { currency: 'GBP', showGstin: true, showSac: false, charges: [{ id: 'vat', label: 'VAT', kind: 'percent', value: 20 }] },
+  US: { currency: 'USD', showGstin: false, showSac: false, charges: [] },
 };
 
 function loadInitial(): InvoiceState {

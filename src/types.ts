@@ -48,7 +48,9 @@ export interface InvoiceState {
   showSignature: boolean;
   showFooter: boolean;
 
-  taxEnabled: boolean;
+  showGstin: boolean;
+  showSac: boolean;
+  showQty: boolean;
   charges: Charge[];
 
   byName: string;

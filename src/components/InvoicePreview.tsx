@@ -9,9 +9,13 @@ import { LOGO_DATA_URI } from '../assets/logo';
  * Do not restyle: the exported PDF renders this node directly.
  */
 const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ state: s }, ref) => {
-  const taxOn = s.taxEnabled;
   const { subtotal, discount, chargeRows, total } = computeTotals(s);
   const useSignImage = s.signMode === 'upload' && s.signImage;
+  const sellerTaxLine = [
+    s.showGstin ? `GSTIN: ${s.byGstin}` : '',
+    s.showSac ? `SAC/HSN: ${s.bySac}` : '',
+  ].filter(Boolean);
+  const descWidth = 100 - 6 - 13 - 19 - (s.showSac ? 14 : 0) - (s.showQty ? 12 : 0);
 
   return (
     <div id="invoice" ref={ref}>
@@ -74,10 +78,8 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
           <div className="ent">{s.byName}</div>
           <p style={{ fontWeight: 700 }}>{s.bySub}</p>
           <p style={{ whiteSpace: 'pre-line' }}>{s.byAddress}</p>
-          {taxOn && (
-            <p className="gst">
-              GSTIN: {s.byGstin} &nbsp; | &nbsp; SAC/HSN: {s.bySac}
-            </p>
+          {sellerTaxLine.length > 0 && (
+            <p className="gst">{sellerTaxLine.join('  |  ')}</p>
           )}
           {s.byCustom.map(
             (f) =>
@@ -96,7 +98,7 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
           </p>
           <p>{s.toEmail}</p>
           <p style={{ whiteSpace: 'pre-line' }}>{s.toAddress}</p>
-          {taxOn && <p className="gst">GSTIN: {s.toGstin}</p>}
+          {s.showGstin && <p className="gst">GSTIN: {s.toGstin}</p>}
           {s.toCustom.map(
             (f) =>
               (f.label || f.value) && (
@@ -112,25 +114,25 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
         <thead>
           <tr>
             <th style={{ width: '6%' }}>NO.</th>
-            <th style={{ width: taxOn ? '38%' : '48%' }}>SERVICE DESCRIPTION</th>
-            {taxOn && <th style={{ width: '14%' }}>SAC/HSN</th>}
-            <th style={{ width: '12%' }}>QTY</th>
-            <th style={{ width: '16%' }}>RATE</th>
-            <th style={{ width: '16%' }}>AMOUNT</th>
+            <th style={{ width: `${descWidth}%` }}>SERVICE DESCRIPTION</th>
+            {s.showSac && <th style={{ width: '14%' }}>SAC/HSN</th>}
+            {s.showQty && <th style={{ width: '12%' }}>QTY</th>}
+            <th style={{ width: '13%' }} className="right">RATE</th>
+            <th style={{ width: '19%' }} className="right">AMOUNT</th>
           </tr>
         </thead>
         <tbody>
-          {s.items.map((item, i) => {
-            const amt = (item.qty || 0) * (item.rate || 0);
+          {s.items.map((item, idx) => {
+            const amt = (s.showQty ? item.qty || 0 : 1) * (item.rate || 0);
             return (
               <tr key={item.id}>
-                <td className="num-col">{i + 1}</td>
+                <td className="num-col">{idx + 1}</td>
                 <td>
                   <div className="desc">{item.desc}</div>
                   {item.period && <div className="period">{item.period}</div>}
                 </td>
-                {taxOn && <td>{item.sac}</td>}
-                <td>{item.qty}</td>
+                {s.showSac && <td>{item.sac}</td>}
+                {s.showQty && <td>{item.qty}</td>}
                 <td className="right">{fmt2(item.rate)}</td>
                 <td className="right">{fmt2(amt)}</td>
               </tr>

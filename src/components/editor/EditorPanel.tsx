@@ -35,7 +35,7 @@ import {
   type IssuerRow,
 } from '../../lib/db';
 import { SectionCard } from './SectionCard';
-import { Field, Select, Switch, TextArea } from './Field';
+import { EyeChip, Field, Select, Switch, TextArea } from './Field';
 import { LineItemsSection } from './LineItemsSection';
 import { SignatureSection } from './SignatureSection';
 import { CustomFields } from './CustomFields';
@@ -190,9 +190,9 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* header */}
-      <div className="border-b border-[#E8ECF4] px-4 pb-3.5 pt-4">
-        <div className="flex items-center justify-between gap-3">
+      {/* floating glass toolbar */}
+      <div className="px-4 pt-4">
+        <div className="flex items-center justify-between rounded-2xl border border-white/70 bg-white/70 px-4 py-3 shadow-[0_6px_24px_-8px_rgba(16,24,40,0.12)] backdrop-blur-xl">
           <div className="flex items-center gap-2.5">
             <Link
               to="/dashboard"
@@ -220,9 +220,9 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       </div>
 
       {/* scrollable sections */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        <Accordion.Root type="multiple" defaultValue={['invoice', 'seller', 'items']} className="space-y-3">
-          <SectionCard value="invoice" icon={FileText} title="Invoice Details" description="Entity, number, dates, currency & badge">
+      <div className="flex-1 overflow-y-auto px-4 py-5">
+        <Accordion.Root type="multiple" defaultValue={['invoice', 'seller', 'items']} className="space-y-4">
+          <SectionCard value="invoice" icon={FileText} title="Invoice Details" description="Entity, number, dates, currency & badge" accent="indigo" complete={Boolean(state.invNo && state.invDate)}>
             {session && issuers.length > 0 && (
               <Select label="Issuer" value={state.issuerId ?? ''} onChange={(e) => applyIssuer(e.target.value)}>
                 <option value="">— Select issuer —</option>
@@ -260,20 +260,24 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             </div>
           </SectionCard>
 
-          <SectionCard value="seller" icon={Building2} title="Seller" description="Who is issuing this invoice">
+          <SectionCard value="seller" icon={Building2} title="Seller" description="Who is issuing this invoice" accent="sky" complete={Boolean(state.byName && state.byAddress)}>
             <Field label="Entity name" value={state.byName} onChange={(e) => update('byName', e.target.value)} />
             <Field label="Sub-line (e.g. brand)" value={state.bySub} onChange={(e) => update('bySub', e.target.value)} />
             <TextArea label="Address" value={state.byAddress} onChange={(e) => update('byAddress', e.target.value)} />
-            {state.taxEnabled && (
+            {(state.showGstin || state.showSac) && (
               <div className="grid grid-cols-2 gap-2.5">
-                <Field label="GSTIN" value={state.byGstin} onChange={(e) => update('byGstin', e.target.value)} />
-                <Field label="SAC/HSN" value={state.bySac} onChange={(e) => update('bySac', e.target.value)} />
+                {state.showGstin && (
+                  <Field label="GSTIN" value={state.byGstin} onChange={(e) => update('byGstin', e.target.value)} />
+                )}
+                {state.showSac && (
+                  <Field label="SAC/HSN" value={state.bySac} onChange={(e) => update('bySac', e.target.value)} />
+                )}
               </div>
             )}
             <CustomFields fields={state.byCustom} onChange={(f) => update('byCustom', f)} />
           </SectionCard>
 
-          <SectionCard value="client" icon={User} title="Client" description="Who is being billed">
+          <SectionCard value="client" icon={User} title="Client" description="Who is being billed" accent="emerald" complete={Boolean(state.toName)}>
             {session && (
               <div className="flex items-end gap-2">
                 <div className="min-w-0 flex-1">
@@ -295,23 +299,23 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               </div>
             )}
             <Field label="Company name" value={state.toName} onChange={(e) => update('toName', e.target.value)} />
+            <Field label="Attn" value={state.toAttn} onChange={(e) => update('toAttn', e.target.value)} />
             <div className="grid grid-cols-2 gap-2.5">
-              <Field label="Attn" value={state.toAttn} onChange={(e) => update('toAttn', e.target.value)} />
               <Field label="Phone" value={state.toPhone} onChange={(e) => update('toPhone', e.target.value)} />
+              <Field label="Email" type="email" value={state.toEmail} onChange={(e) => update('toEmail', e.target.value)} />
             </div>
-            <Field label="Email" type="email" value={state.toEmail} onChange={(e) => update('toEmail', e.target.value)} />
             <TextArea label="Address" value={state.toAddress} onChange={(e) => update('toAddress', e.target.value)} />
-            {state.taxEnabled && (
+            {state.showGstin && (
               <Field label="GSTIN" value={state.toGstin} onChange={(e) => update('toGstin', e.target.value)} />
             )}
             <CustomFields fields={state.toCustom} onChange={(f) => update('toCustom', f)} />
           </SectionCard>
 
-          <SectionCard value="items" icon={Package} title="Line Items" description="Services & products being billed">
-            <LineItemsSection items={state.items} taxOn={state.taxEnabled} currency={state.currency} ops={items} />
+          <SectionCard value="items" icon={Package} title="Line Items" description="Services & products being billed" accent="purple" complete={state.items.length > 0 && state.items.every((i) => i.desc)}>
+            <LineItemsSection items={state.items} showSac={state.showSac} showQty={state.showQty} currency={state.currency} ops={items} />
           </SectionCard>
 
-          <SectionCard value="payment" icon={Landmark} title="Payment Details" description="Bank transfer information">
+          <SectionCard value="payment" icon={Landmark} title="Payment Details" description="Bank transfer information" accent="cyan" complete={Boolean(state.bankAcNo)}>
             <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
               <Switch label="Show bank details on invoice" checked={state.showBank} onChange={(v) => update('showBank', v)} />
             </div>
@@ -348,15 +352,20 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             <CustomFields fields={state.bankCustom} onChange={(f) => update('bankCustom', f)} />
           </SectionCard>
 
-          <SectionCard value="taxes" icon={Receipt} title="Taxes & Charges" description="Calculated into the payable total">
-            <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
-              <Switch label="Show GSTIN / SAC-HSN tax fields" checked={state.taxEnabled} onChange={(v) => update('taxEnabled', v)} />
+          <SectionCard value="taxes" icon={Receipt} title="Taxes & Charges" description="Calculated into the payable total" accent="amber" complete={state.charges.length > 0}>
+            <div>
+              <p className="mb-1.5 text-[12.5px] font-medium text-slate-500">Show on invoice</p>
+              <div className="flex flex-wrap gap-1.5">
+                <EyeChip label="GSTIN" on={state.showGstin} onToggle={(v) => update('showGstin', v)} />
+                <EyeChip label="SAC/HSN" on={state.showSac} onToggle={(v) => update('showSac', v)} />
+                <EyeChip label="Qty column" on={state.showQty} onToggle={(v) => update('showQty', v)} />
+              </div>
             </div>
             <ChargesEditor charges={state.charges} onChange={(c) => update('charges', c)} />
             <Field label="Discount amount" type="number" min={0} step={0.01} value={state.discount} onChange={(e) => update('discount', parseFloat(e.target.value) || 0)} />
           </SectionCard>
 
-          <SectionCard value="notes" icon={NotebookPen} title="Notes" description="Payment terms shown on the invoice">
+          <SectionCard value="notes" icon={NotebookPen} title="Notes" description="Payment terms shown on the invoice" accent="pink" complete={state.notes.length > 0}>
             <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
               <Switch label="Show notes on invoice" checked={state.showNotes} onChange={(v) => update('showNotes', v)} />
               <Switch label="Show amount in words" checked={state.showWords} onChange={(v) => update('showWords', v)} />
@@ -383,14 +392,14 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             </button>
           </SectionCard>
 
-          <SectionCard value="signature" icon={PenTool} title="Signature" description="Type with a font or upload an image">
+          <SectionCard value="signature" icon={PenTool} title="Signature" description="Type with a font or upload an image" accent="violet" complete={Boolean(state.signName || state.signImage)}>
             <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
               <Switch label="Show signature on invoice" checked={state.showSignature} onChange={(v) => update('showSignature', v)} />
             </div>
             <SignatureSection state={state} update={update} />
           </SectionCard>
 
-          <SectionCard value="footer" icon={Settings} title="Footer" description="Company line at the page bottom">
+          <SectionCard value="footer" icon={Settings} title="Footer" description="Company line at the page bottom" accent="slate" complete={Boolean(state.footCompany)}>
             <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
               <Switch label="Show footer on invoice" checked={state.showFooter} onChange={(v) => update('showFooter', v)} />
             </div>
@@ -402,7 +411,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       </div>
 
       {/* sticky download bar */}
-      <div className="border-t border-[#E8ECF4] bg-white/90 px-4 py-3 backdrop-blur">
+      <div className="border-t border-[#E8ECF4] bg-white/80 px-4 py-3.5 backdrop-blur-xl">
         <div className="mb-2.5 flex items-center justify-between">
           <span className="text-[12px] font-medium text-slate-500">Total</span>
           <span className="text-[15px] font-bold tabular-nums text-slate-900">
@@ -440,7 +449,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           type="button"
           onClick={downloadPDF}
           disabled={downloading}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-[#0e1a3d] py-3 text-[14px] font-bold text-white shadow-lg shadow-[#0e1a3d]/20 transition-all duration-150 hover:bg-[#16255a] hover:shadow-xl active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-deep to-brand py-3 text-[14px] font-bold text-white shadow-lg shadow-brand/25 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-brand/30 active:translate-y-0 active:scale-[0.99] disabled:cursor-wait disabled:opacity-60 disabled:hover:translate-y-0"
         >
           <Download size={16} />
           {downloading ? 'Generating…' : 'Download PDF'}

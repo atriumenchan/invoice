@@ -4,12 +4,14 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export const inputCls =
-  'h-10 w-full rounded-lg border border-[#E8ECF4] bg-slate-50/60 px-3 text-[14px] text-slate-900 ' +
-  'placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 ' +
-  'focus:border-brand focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand/10';
+  'h-12 w-full rounded-xl border border-[#E8ECF4] bg-[#F7F8F9] px-3.5 text-[14px] text-slate-900 ' +
+  'shadow-[inset_0_1px_2px_rgba(16,24,40,0.03)] placeholder:text-slate-400 transition-all duration-150 ' +
+  'hover:border-slate-300 focus:border-brand focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand/15 ' +
+  'focus:shadow-[0_4px_14px_-4px_rgba(124,108,240,0.3)]';
 
 const labelCls = 'mb-1.5 block text-[12.5px] font-medium text-slate-500';
 
@@ -59,6 +61,32 @@ export function Select({ label, className, children, ...props }: SelectProps) {
         {children}
       </select>
     </label>
+  );
+}
+
+interface EyeChipProps {
+  label: string;
+  on: boolean;
+  onToggle: (v: boolean) => void;
+}
+
+/** Compact visibility toggle — controls whether a field/column appears on the invoice. */
+export function EyeChip({ label, on, onToggle }: EyeChipProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(!on)}
+      title={on ? `Hide ${label} on invoice` : `Show ${label} on invoice`}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all duration-150 active:scale-[0.97]',
+        on
+          ? 'bg-brand/10 text-brand-deep hover:bg-brand/15'
+          : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-500'
+      )}
+    >
+      {on ? <Eye size={12} /> : <EyeOff size={12} />}
+      {label}
+    </button>
   );
 }
 
