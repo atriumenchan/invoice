@@ -91,7 +91,7 @@ export function computeTotals(s: InvoiceState): Totals {
     (sum, it) => sum + (s.showQty ? it.qty || 0 : 1) * (it.rate || 0),
     0
   );
-  const discount = s.discount || 0;
+  const discount = s.showDiscount ? s.discount || 0 : 0;
   const taxable = subtotal - discount;
   const chargeRows: ChargeRow[] = s.charges.map((c) => ({
     ...c,

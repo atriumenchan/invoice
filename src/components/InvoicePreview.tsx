@@ -166,7 +166,9 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
         <div className="card2">
           <h4>INVOICE SUMMARY</h4>
           <div className="kv-row"><span className="k">Subtotal</span><span>{fmt2(subtotal)}</span></div>
-          <div className="kv-row"><span className="k">Discount</span><span>{fmt2(discount)}</span></div>
+          {s.showDiscount && (
+            <div className="kv-row"><span className="k">Discount</span><span>{fmt2(discount)}</span></div>
+          )}
           {chargeRows.map((c) => (
             <div className="kv-row" key={c.id}>
               <span className="k">
