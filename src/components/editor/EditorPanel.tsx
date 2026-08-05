@@ -7,6 +7,7 @@ import {
   FileText,
   Landmark,
   LayoutDashboard,
+  LayoutTemplate,
   NotebookPen,
   Package,
   PenTool,
@@ -503,47 +504,44 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           </div>
         )}
         {session && (
-          <div className="mb-2.5 flex gap-2">
+          <div className="mb-2.5 flex items-center gap-1.5">
             <button
               type="button"
               onClick={onSaveInvoice}
               disabled={cloudBusy}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E8ECF4] bg-white py-2.5 text-[12.5px] font-bold text-slate-700 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.99] disabled:opacity-60"
+              title={state.invoiceId ? `Update ${state.invNo}` : 'Save invoice'}
+              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#E8ECF4] bg-white text-[12px] font-semibold text-slate-600 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.97] disabled:opacity-60"
             >
               <Save size={14} />
-              {cloudBusy ? 'Saving…' : state.invoiceId ? `Update ${state.invNo}` : 'Save invoice'}
+              <span className="truncate">{cloudBusy ? 'Saving…' : state.invoiceId ? 'Update' : 'Save'}</span>
             </button>
             <button
               type="button"
               onClick={onSaveTemplate}
               disabled={cloudBusy}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E8ECF4] bg-white py-2.5 text-[12.5px] font-bold text-slate-700 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.99] disabled:opacity-60"
+              title="Save as template"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#E8ECF4] bg-white text-slate-500 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.97] disabled:opacity-60"
             >
-              <Plus size={14} />
-              Save as template
+              <LayoutTemplate size={15} />
             </button>
-          </div>
-        )}
-        {session && (
-          <div className="mb-2.5 flex gap-2">
             <button
               type="button"
               onClick={() => runReview(false)}
               disabled={cloudBusy}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-brand/25 bg-brand/5 py-2.5 text-[12.5px] font-bold text-brand-deep transition-all duration-150 hover:bg-brand/10 active:scale-[0.99] disabled:opacity-60"
+              title="AI Review"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-brand/25 bg-brand/5 text-brand-deep transition-all duration-150 hover:bg-brand/10 active:scale-[0.97] disabled:opacity-60"
             >
-              <Sparkles size={14} />
-              AI Review
+              <Sparkles size={15} />
             </button>
             {!isAdmin && state.status !== 'approved' && state.status !== 'pending' && (
               <button
                 type="button"
                 onClick={() => runReview(true)}
                 disabled={cloudBusy}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 py-2.5 text-[12.5px] font-bold text-blue-700 transition-all duration-150 hover:bg-blue-100 active:scale-[0.99] disabled:opacity-60"
+                title="Send for approval"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700 transition-all duration-150 hover:bg-blue-100 active:scale-[0.97] disabled:opacity-60"
               >
-                <Send size={14} />
-                Send for approval
+                <Send size={15} />
               </button>
             )}
           </div>

@@ -277,6 +277,9 @@ as $$
          lower(coalesce((select value from public.app_config where key = 'admin_email'), ''));
 $$;
 
+-- the client calls supabase.rpc('is_admin') directly, so it must be callable
+grant execute on function public.is_admin() to authenticated, anon;
+
 -- admin can see & moderate ALL invoices; owners keep full control of theirs
 drop policy if exists "invoices own" on public.invoices;
 
