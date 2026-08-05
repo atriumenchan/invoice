@@ -116,6 +116,7 @@ as $$
 declare
   v_uid uuid := auth.uid();
   v_seq bigint;
+  v_stamp text := upper(to_char(now(), 'MONYY'));  -- e.g. 'AUG26'
 begin
   if v_uid is null then
     raise exception 'not authenticated';
@@ -127,7 +128,8 @@ begin
   do update set seq = public.invoice_sequences.seq + 1
   returning seq into v_seq;
 
-  return p_prefix || '-' || lpad(v_seq::text, 4, '0');
+  -- e.g. BG-IN-AUG26-0007 : sequence keeps counting across months
+  return p_prefix || '-' || v_stamp || '-' || lpad(v_seq::text, 4, '0');
 end;
 $$;
 

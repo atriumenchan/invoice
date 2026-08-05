@@ -20,7 +20,7 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
-import type { EntityRegion } from '../../types';
+import type { EntityRegion, InvoiceStatus } from '../../types';
 import type { InvoiceApi } from '../../state/useInvoice';
 import { computeTotals, fmt2 } from '../../lib/calc';
 import { useAuth } from '../../state/AuthContext';
@@ -41,7 +41,7 @@ import { SectionCard } from './SectionCard';
 import { EyeChip, Field, Select, Switch, TextArea } from './Field';
 import { ReviewModal } from '../ReviewModal';
 import { reviewInvoice, type ReviewResult } from '../../lib/ai';
-import { setInvoiceStatus } from '../../lib/db';
+import { getInvoiceStatus, setInvoiceStatus } from '../../lib/db';
 import { LineItemsSection } from './LineItemsSection';
 import { SignatureSection } from './SignatureSection';
 import { CustomFields } from './CustomFields';
@@ -107,6 +107,17 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       }
     })();
   }, [session]);
+
+  /* pull the live status so admin approvals show up for the creator */
+  useEffect(() => {
+    if (!session || !state.invoiceId) return;
+    getInvoiceStatus(state.invoiceId)
+      .then((live) => {
+        if (live && live !== state.status) update('status', live as InvoiceStatus);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, state.invoiceId]);
 
   const flash = (msg: string) => {
     setCloudMsg(msg);

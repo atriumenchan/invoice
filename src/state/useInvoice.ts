@@ -5,6 +5,12 @@ import type { EntityRegion, InvoiceState, LineItem } from '../types';
 
 export const STORAGE_KEY = 'admexo-invoice-v2';
 
+/** e.g. 'AUG26' — used for placeholder numbers before cloud save */
+const monthStamp = () => {
+  const d = new Date();
+  return `${d.toLocaleString('en', { month: 'short' }).toUpperCase()}${String(d.getFullYear()).slice(2)}`;
+};
+
 const newItem = (): LineItem => ({
   id: crypto.randomUUID(),
   desc: 'New service',
@@ -23,7 +29,7 @@ const DEFAULT_STATE: InvoiceState = {
   status: 'draft',
   entity: 'IN',
   docTitle: 'TAX INVOICE',
-  invNo: '#ADS-APR26-001',
+  invNo: `#BG-IN-${monthStamp()}-0001`,
   invDate: '10 Apr 2026',
   dueDate: '17 Apr 2026',
   currency: 'INR',
@@ -71,7 +77,7 @@ const DEFAULT_STATE: InvoiceState = {
   bankAcType: 'Current',
   bankAcNo: '99998899114411',
   bankIfsc: 'HDFC0000088',
-  bankRef: 'ADS-APR26-001',
+  bankRef: `BG-IN-${monthStamp()}-0001`,
   bankCustom: [],
 
   discount: 0,

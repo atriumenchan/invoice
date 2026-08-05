@@ -171,10 +171,8 @@ export async function saveInvoiceToCloud(s: InvoiceState, opts?: { title?: strin
   const invoice_no = s.invoiceId ? s.invNo : await nextInvoiceNumber(s.invPrefix || 'INV');
   const stateToStore = s.invoiceId ? s : { ...s, invNo: invoice_no };
   const row = {
-    user_id,
     invoice_no,
     title: opts?.title ?? s.toName ?? '',
-    created_by_email: auth.user.email ?? null,
     issuer_id: s.issuerId,
     client_id: s.clientId,
     status: s.status,
@@ -186,11 +184,17 @@ export async function saveInvoiceToCloud(s: InvoiceState, opts?: { title?: strin
     state: stateToStore,
   };
   if (s.invoiceId) {
+    // never touch user_id / created_by_email on update — an admin editing
+    // someone else's invoice must not take ownership of it
     const { error } = await supabase.from('invoices').update(row).eq('id', s.invoiceId);
     if (error) throw error;
     return { id: s.invoiceId, invoice_no };
   }
-  const { data, error } = await supabase.from('invoices').insert(row).select('id').single();
+  const { data, error } = await supabase
+    .from('invoices')
+    .insert({ ...row, user_id, created_by_email: auth.user.email ?? null })
+    .select('id')
+    .single();
   if (error) throw error;
   return { id: data.id as string, invoice_no };
 }
@@ -202,6 +206,13 @@ export async function listInvoices(): Promise<InvoiceRow[]> {
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data as InvoiceRow[];
+}
+
+/** Fetch the live status of a saved invoice (picks up admin approvals). */
+export async function getInvoiceStatus(id: string): Promise<string | null> {
+  const { data, error } = await supabase.from('invoices').select('status').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return (data?.status as string) ?? null;
 }
 
 export async function setInvoiceStatus(id: string, status: 'pending' | 'approved' | 'rejected' | 'draft'): Promise<void> {
