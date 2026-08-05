@@ -266,8 +266,8 @@ alter table public.app_config enable row level security;
 -- no policies: only readable through the security-definer function below
 
 insert into public.app_config (key, value)
-values ('admin_email', 'rya@admexo.com')
-on conflict (key) do nothing;
+values ('admin_email', 'ryan@admexo.com')
+on conflict (key) do update set value = excluded.value;
 
 create or replace function public.is_admin()
 returns boolean
