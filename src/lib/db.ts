@@ -45,9 +45,11 @@ export interface BankRow {
 export interface InvoiceRow {
   id: string;
   invoice_no: string;
+  title: string | null;
   status: string;
   currency: string | null;
   total: number;
+  created_by_email: string | null;
   created_at: string;
   state: InvoiceState;
 }
@@ -161,14 +163,18 @@ export async function nextInvoiceNumber(prefix: string): Promise<string> {
 }
 
 /* ---------- invoices ---------- */
-export async function saveInvoiceToCloud(s: InvoiceState): Promise<{ id: string; invoice_no: string }> {
-  const user_id = await uid();
+export async function saveInvoiceToCloud(s: InvoiceState, opts?: { title?: string }): Promise<{ id: string; invoice_no: string }> {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error('Not signed in');
+  const user_id = auth.user.id;
   const t = computeTotals(s);
   const invoice_no = s.invoiceId ? s.invNo : await nextInvoiceNumber(s.invPrefix || 'INV');
   const stateToStore = s.invoiceId ? s : { ...s, invNo: invoice_no };
   const row = {
     user_id,
     invoice_no,
+    title: opts?.title ?? s.toName ?? '',
+    created_by_email: auth.user.email ?? null,
     issuer_id: s.issuerId,
     client_id: s.clientId,
     status: s.status,
@@ -192,10 +198,56 @@ export async function saveInvoiceToCloud(s: InvoiceState): Promise<{ id: string;
 export async function listInvoices(): Promise<InvoiceRow[]> {
   const { data, error } = await supabase
     .from('invoices')
-    .select('id, invoice_no, status, currency, total, created_at, state')
+    .select('id, invoice_no, title, status, currency, total, created_by_email, created_at, state')
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data as InvoiceRow[];
+}
+
+export async function setInvoiceStatus(id: string, status: 'pending' | 'approved' | 'rejected' | 'draft'): Promise<void> {
+  const patch: Record<string, unknown> = { status };
+  if (status === 'pending') patch.submitted_at = new Date().toISOString();
+  if (status === 'approved') {
+    patch.approved_at = new Date().toISOString();
+    const { data } = await supabase.auth.getUser();
+    patch.approved_by = data.user?.email ?? null;
+  }
+  const { error } = await supabase.from('invoices').update(patch).eq('id', id);
+  if (error) throw error;
+}
+
+export async function renameInvoice(id: string, title: string): Promise<void> {
+  const { error } = await supabase.from('invoices').update({ title }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function renameTemplate(id: string, name: string): Promise<void> {
+  const { error } = await supabase.from('templates').update({ name }).eq('id', id);
+  if (error) throw error;
+}
+
+/** Clone a template into the invoices list with "copy N" naming. */
+export async function cloneTemplateAsInvoice(t: TemplateRow, existingTitles: string[]): Promise<InvoiceRow> {
+  const base = t.name;
+  let n = 1;
+  let title = `${base} copy`;
+  while (existingTitles.includes(title)) {
+    n += 1;
+    title = `${base} copy ${n}`;
+  }
+  const state: InvoiceState = { ...t.state, invoiceId: null, status: 'draft' };
+  const { id, invoice_no } = await saveInvoiceToCloud(state, { title });
+  return {
+    id,
+    invoice_no,
+    title,
+    status: 'draft',
+    currency: state.currency,
+    total: computeTotals(state).total,
+    created_by_email: null,
+    created_at: new Date().toISOString(),
+    state: { ...state, invNo: invoice_no },
+  };
 }
 
 export async function deleteInvoice(id: string): Promise<void> {

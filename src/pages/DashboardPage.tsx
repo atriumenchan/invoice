@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
+  Check,
+  Copy,
   FilePlus2,
   FileText,
   LayoutTemplate,
@@ -10,31 +12,51 @@ import {
   Mail,
   Pencil,
   Trash2,
+  UserPlus,
+  Users,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../state/AuthContext';
 import { STORAGE_KEY } from '../state/useInvoice';
+import { supabase } from '../lib/supabase';
 import {
+  cloneTemplateAsInvoice,
   deleteInvoice,
   deleteTemplate,
   listInvoices,
   listTemplates,
+  renameInvoice,
+  renameTemplate,
+  setInvoiceStatus,
   type InvoiceRow,
   type TemplateRow,
 } from '../lib/db';
 import { cn } from '../lib/utils';
+import type { InvoiceStatus } from '../types';
+import { inputCls } from '../components/editor/Field';
 
 const STATUS_STYLES: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-600',
+  pending: 'bg-blue-50 text-blue-600',
+  approved: 'bg-emerald-50 text-emerald-600',
+  rejected: 'bg-rose-50 text-rose-600',
   sent: 'bg-blue-50 text-blue-600',
   paid: 'bg-emerald-50 text-emerald-600',
   overdue: 'bg-rose-50 text-rose-600',
   void: 'bg-slate-100 text-slate-400',
 };
 
+interface ManagedUser {
+  id: string;
+  email: string;
+  created_at: string;
+  last_sign_in_at: string | null;
+}
+
 export default function DashboardPage() {
-  const { session, signOut } = useAuth();
+  const { session, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<'invoices' | 'templates'>('invoices');
+  const [tab, setTab] = useState<'invoices' | 'templates' | 'users'>('invoices');
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,9 +82,38 @@ export default function DashboardPage() {
   const openInvoice = (row: InvoiceRow) => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ ...row.state, invoiceId: row.id, invNo: row.invoice_no })
+      JSON.stringify({ ...row.state, invoiceId: row.id, invNo: row.invoice_no, status: row.status as InvoiceStatus })
     );
     navigate('/');
+  };
+
+  const cloneTemplate = async (row: TemplateRow) => {
+    try {
+      await cloneTemplateAsInvoice(row, invoices.map((i) => i.title ?? ''));
+      await load();
+      setTab('invoices');
+    } catch (e) {
+      alert('Could not clone: ' + (e as Error).message);
+    }
+  };
+
+  const renameInvoiceRow = async (row: InvoiceRow) => {
+    const title = window.prompt('Invoice name', row.title ?? row.invoice_no);
+    if (!title || title === row.title) return;
+    await renameInvoice(row.id, title);
+    load();
+  };
+
+  const renameTemplateRow = async (row: TemplateRow) => {
+    const name = window.prompt('Template name', row.name);
+    if (!name || name === row.name) return;
+    await renameTemplate(row.id, name);
+    load();
+  };
+
+  const moderate = async (row: InvoiceRow, status: 'approved' | 'rejected') => {
+    await setInvoiceStatus(row.id, status);
+    load();
   };
 
   const openTemplate = (row: TemplateRow) => {
@@ -126,7 +177,7 @@ export default function DashboardPage() {
 
       <main className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-6 inline-flex rounded-full bg-slate-100 p-1">
-          {(['invoices', 'templates'] as const).map((t) => (
+          {(['invoices', 'templates', ...(isAdmin ? (['users'] as const) : [])] as const).map((t) => (
             <button
               key={t}
               type="button"
@@ -147,6 +198,8 @@ export default function DashboardPage() {
           </div>
         ) : error ? (
           <p className="rounded-xl bg-rose-50 px-4 py-3 text-[13px] font-medium text-rose-600">{error}</p>
+        ) : tab === 'users' && isAdmin ? (
+          <UsersPanel />
         ) : tab === 'invoices' ? (
           invoices.length === 0 ? (
             <EmptyState
@@ -165,9 +218,13 @@ export default function DashboardPage() {
                     <FileText size={16} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[14px] font-semibold text-slate-900">{row.invoice_no}</p>
+                    <p className="truncate text-[14px] font-semibold text-slate-900">
+                      {row.title || row.invoice_no}
+                      <span className="ml-2 text-[12px] font-medium text-slate-400">{row.invoice_no}</span>
+                    </p>
                     <p className="truncate text-[12px] text-slate-500">
                       {row.state?.toName || 'No client'} · {new Date(row.created_at).toLocaleDateString()}
+                      {isAdmin && row.created_by_email ? ` · ${row.created_by_email}` : ''}
                     </p>
                   </div>
                   <span
@@ -181,8 +238,31 @@ export default function DashboardPage() {
                   <span className="shrink-0 text-[13.5px] font-bold tabular-nums text-slate-900">
                     {row.currency} {Number(row.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </span>
-                  <button type="button" title="Open in builder" onClick={() => openInvoice(row)} className="icon-btn">
+                  {isAdmin && row.status === 'pending' && (
+                    <>
+                      <button
+                        type="button"
+                        title="Approve"
+                        onClick={() => moderate(row, 'approved')}
+                        className="icon-btn bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                      >
+                        <Check size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        title="Reject"
+                        onClick={() => moderate(row, 'rejected')}
+                        className="icon-btn bg-rose-50 text-rose-500 hover:bg-rose-100"
+                      >
+                        <X size={14} />
+                      </button>
+                    </>
+                  )}
+                  <button type="button" title="Rename" onClick={() => renameInvoiceRow(row)} className="icon-btn">
                     <Pencil size={14} />
+                  </button>
+                  <button type="button" title="Open in builder" onClick={() => openInvoice(row)} className="icon-btn">
+                    <FileText size={14} />
                   </button>
                   <button type="button" title="Email invoice" onClick={() => emailInvoice(row)} className="icon-btn">
                     <Mail size={14} />
@@ -221,8 +301,19 @@ export default function DashboardPage() {
                     {row.state?.byName || ''} · {new Date(row.created_at).toLocaleDateString()}
                   </p>
                 </div>
-                <button type="button" title="Use template" onClick={() => openTemplate(row)} className="icon-btn">
+                <button
+                  type="button"
+                  title="Clone as new invoice"
+                  onClick={() => cloneTemplate(row)}
+                  className="icon-btn bg-brand/5 text-brand hover:bg-brand/10"
+                >
+                  <Copy size={14} />
+                </button>
+                <button type="button" title="Rename" onClick={() => renameTemplateRow(row)} className="icon-btn">
                   <Pencil size={14} />
+                </button>
+                <button type="button" title="Use template" onClick={() => openTemplate(row)} className="icon-btn">
+                  <FileText size={14} />
                 </button>
                 <button
                   type="button"
@@ -247,6 +338,126 @@ function EmptyState({ icon, title, desc }: { icon: React.ReactNode; title: strin
       <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand/10 text-brand">{icon}</span>
       <h3 className="mt-3 text-[15px] font-bold text-slate-900">{title}</h3>
       <p className="mt-1 max-w-xs text-center text-[13px] text-slate-500">{desc}</p>
+    </div>
+  );
+}
+
+function UsersPanel() {
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const call = useCallback(async (method: 'GET' | 'POST', body?: object) => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error('Not signed in');
+    const r = await fetch('/api/users', {
+      method,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const json = await r.json();
+    if (!r.ok) throw new Error(json.error || `Request failed (${r.status})`);
+    return json;
+  }, []);
+
+  const loadUsers = useCallback(async () => {
+    setLoadingUsers(true);
+    try {
+      const json = await call('GET');
+      setUsers(json.users);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, [call]);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
+
+  const createUser = async () => {
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const json = await call('POST', { email, password });
+      setMsg(`Account created for ${json.email} — share the password with them.`);
+      setEmail('');
+      setPassword('');
+      loadUsers();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-[#E8ECF4] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.05)]">
+        <h3 className="flex items-center gap-2 text-[14px] font-bold text-slate-900">
+          <UserPlus size={15} className="text-brand" /> Create user account
+        </h3>
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <input
+            type="email"
+            placeholder="user@admexo.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={cn(inputCls, 'max-w-xs flex-1')}
+          />
+          <input
+            type="text"
+            placeholder="Password (min 6 chars)"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={cn(inputCls, 'max-w-xs flex-1')}
+          />
+          <button
+            type="button"
+            onClick={createUser}
+            disabled={busy || !email || password.length < 6}
+            className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-[#0e1a3d] px-4 text-[13px] font-bold text-white transition-all duration-150 hover:bg-[#16255a] active:scale-[0.98] disabled:opacity-50"
+          >
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+            Create
+          </button>
+        </div>
+        {msg && <p className="mt-2 text-[12.5px] font-semibold text-emerald-600">{msg}</p>}
+        {err && <p className="mt-2 text-[12.5px] font-semibold text-rose-600">{err}</p>}
+      </div>
+
+      {loadingUsers ? (
+        <div className="flex justify-center py-10">
+          <Loader2 size={20} className="animate-spin text-brand" />
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {users.map((u) => (
+            <div
+              key={u.id}
+              className="flex items-center gap-3 rounded-2xl border border-[#E8ECF4] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.05)]"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+                <Users size={15} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-semibold text-slate-900">{u.email}</p>
+                <p className="text-[12px] text-slate-500">
+                  Created {new Date(u.created_at).toLocaleDateString()}
+                  {u.last_sign_in_at ? ` · last sign-in ${new Date(u.last_sign_in_at).toLocaleDateString()}` : ' · never signed in'}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

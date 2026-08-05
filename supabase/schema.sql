@@ -241,6 +241,58 @@ create policy "ai_reviews own" on public.ai_reviews
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ================================================================
+-- MIGRATION v2 — super-admin approval workflow
+-- Run ONLY this section if you already ran the file above.
+-- ================================================================
+
+-- invoices: approval workflow + display title + owner email
+alter table public.invoices add column if not exists title text;
+alter table public.invoices add column if not exists created_by_email text;
+alter table public.invoices add column if not exists submitted_at timestamptz;
+alter table public.invoices add column if not exists approved_at timestamptz;
+alter table public.invoices add column if not exists approved_by text;
+
+-- widen allowed statuses: draft → pending → approved / rejected
+alter table public.invoices drop constraint if exists invoices_status_check;
+alter table public.invoices add constraint invoices_status_check
+  check (status in ('draft', 'pending', 'approved', 'rejected', 'sent', 'paid', 'overdue', 'void'));
+
+-- app config (who is the super admin)
+create table if not exists public.app_config (
+  key text primary key,
+  value text not null
+);
+alter table public.app_config enable row level security;
+-- no policies: only readable through the security-definer function below
+
+insert into public.app_config (key, value)
+values ('admin_email', 'rya@admexo.com')
+on conflict (key) do nothing;
+
+create or replace function public.is_admin()
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select lower(coalesce(auth.jwt() ->> 'email', '')) =
+         lower(coalesce((select value from public.app_config where key = 'admin_email'), ''));
+$$;
+
+-- admin can see & moderate ALL invoices; owners keep full control of theirs
+drop policy if exists "invoices own" on public.invoices;
+
+create policy "invoices select" on public.invoices
+  for select using (auth.uid() = user_id or public.is_admin());
+
+create policy "invoices insert" on public.invoices
+  for insert with check (auth.uid() = user_id);
+
+create policy "invoices update" on public.invoices
+  for update using (auth.uid() = user_id or public.is_admin());
+
+create policy "invoices delete" on public.invoices
+  for delete using (auth.uid() = user_id or public.is_admin());
+
+-- ================================================================
 -- Seed: the two ADMEXO issuers (runs for the user who executes it
 -- only if they are logged in — otherwise seed later from the app)
 -- ================================================================

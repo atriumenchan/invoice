@@ -13,7 +13,9 @@ import {
   Plus,
   Receipt,
   Save,
+  Send,
   Settings,
+  Sparkles,
   Trash2,
   User,
 } from 'lucide-react';
@@ -36,6 +38,9 @@ import {
 } from '../../lib/db';
 import { SectionCard } from './SectionCard';
 import { EyeChip, Field, Select, Switch, TextArea } from './Field';
+import { ReviewModal } from '../ReviewModal';
+import { reviewInvoice, type ReviewResult } from '../../lib/ai';
+import { setInvoiceStatus } from '../../lib/db';
 import { LineItemsSection } from './LineItemsSection';
 import { SignatureSection } from './SignatureSection';
 import { CustomFields } from './CustomFields';
@@ -44,12 +49,50 @@ import { ChargesEditor } from './ChargesEditor';
 export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   const { state, update, applyEntity, items, notes, dirty, savedAt, saveNow, downloading, downloadPDF } = inv;
   const { total } = computeTotals(state);
-  const { session } = useAuth();
+  const { session, isAdmin } = useAuth();
   const [issuers, setIssuers] = useState<IssuerRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [banks, setBanks] = useState<BankRow[]>([]);
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudMsg, setCloudMsg] = useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [review, setReview] = useState<ReviewResult | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewThenSubmit, setReviewThenSubmit] = useState(false);
+
+  const canDownload = isAdmin || state.status === 'approved';
+  const runReview = async (thenSubmit: boolean) => {
+    setReviewThenSubmit(thenSubmit);
+    setReviewOpen(true);
+    setReviewLoading(true);
+    setReview(null);
+    setReviewError(null);
+    try {
+      setReview(await reviewInvoice(state));
+    } catch (e) {
+      setReviewError((e as Error).message);
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  const submitForApproval = async () => {
+    setReviewOpen(false);
+    setCloudBusy(true);
+    try {
+      const { id, invoice_no } = await saveInvoiceToCloud({ ...state, status: 'pending' });
+      update('invoiceId', id);
+      update('invNo', invoice_no);
+      update('status', 'pending');
+      await setInvoiceStatus(id, 'pending');
+      flash(`Sent for approval as ${invoice_no}`);
+    } catch (e) {
+      alert('Could not submit: ' + (e as Error).message);
+    } finally {
+      setCloudBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!session) return;
@@ -146,9 +189,11 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   const onSaveInvoice = async () => {
     setCloudBusy(true);
     try {
-      const { id, invoice_no } = await saveInvoiceToCloud(state);
+      const nextStatus = !isAdmin && state.status === 'approved' ? 'draft' : state.status;
+      const { id, invoice_no } = await saveInvoiceToCloud({ ...state, status: nextStatus });
       update('invoiceId', id);
       update('invNo', invoice_no);
+      if (nextStatus !== state.status) update('status', nextStatus);
       flash(`Saved as ${invoice_no}`);
     } catch (e) {
       alert('Could not save invoice: ' + (e as Error).message);
@@ -264,16 +309,25 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             <Field label="Entity name" value={state.byName} onChange={(e) => update('byName', e.target.value)} />
             <Field label="Sub-line (e.g. brand)" value={state.bySub} onChange={(e) => update('bySub', e.target.value)} />
             <TextArea label="Address" value={state.byAddress} onChange={(e) => update('byAddress', e.target.value)} />
-            {(state.showGstin || state.showSac) && (
-              <div className="grid grid-cols-2 gap-2.5">
-                {state.showGstin && (
-                  <Field label="GSTIN" value={state.byGstin} onChange={(e) => update('byGstin', e.target.value)} />
-                )}
-                {state.showSac && (
-                  <Field label="SAC/HSN" value={state.bySac} onChange={(e) => update('bySac', e.target.value)} />
-                )}
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-[12.5px] font-medium text-slate-500">Tax fields</span>
+                <div className="flex gap-1.5">
+                  <EyeChip label="GSTIN" on={state.showGstin} onToggle={(v) => update('showGstin', v)} />
+                  <EyeChip label="SAC/HSN" on={state.showSac} onToggle={(v) => update('showSac', v)} />
+                </div>
               </div>
-            )}
+              {(state.showGstin || state.showSac) && (
+                <div className="grid grid-cols-2 gap-2.5">
+                  {state.showGstin && (
+                    <Field label="GSTIN" value={state.byGstin} onChange={(e) => update('byGstin', e.target.value)} />
+                  )}
+                  {state.showSac && (
+                    <Field label="SAC/HSN" value={state.bySac} onChange={(e) => update('bySac', e.target.value)} />
+                  )}
+                </div>
+              )}
+            </div>
             <CustomFields fields={state.byCustom} onChange={(f) => update('byCustom', f)} />
           </SectionCard>
 
@@ -305,6 +359,10 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               <Field label="Email" type="email" value={state.toEmail} onChange={(e) => update('toEmail', e.target.value)} />
             </div>
             <TextArea label="Address" value={state.toAddress} onChange={(e) => update('toAddress', e.target.value)} />
+            <div className="flex items-center justify-between">
+              <span className="text-[12.5px] font-medium text-slate-500">Tax ID</span>
+              <EyeChip label="GSTIN" on={state.showGstin} onToggle={(v) => update('showGstin', v)} />
+            </div>
             {state.showGstin && (
               <Field label="GSTIN" value={state.toGstin} onChange={(e) => update('toGstin', e.target.value)} />
             )}
@@ -312,6 +370,13 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           </SectionCard>
 
           <SectionCard value="items" icon={Package} title="Line Items" description="Services & products being billed" accent="purple" complete={state.items.length > 0 && state.items.every((i) => i.desc)}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[12.5px] font-medium text-slate-500">Columns</span>
+              <div className="flex gap-1.5">
+                <EyeChip label="SAC/HSN" on={state.showSac} onToggle={(v) => update('showSac', v)} />
+                <EyeChip label="Qty" on={state.showQty} onToggle={(v) => update('showQty', v)} />
+              </div>
+            </div>
             <LineItemsSection items={state.items} showSac={state.showSac} showQty={state.showQty} currency={state.currency} ops={items} />
           </SectionCard>
 
@@ -353,16 +418,16 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           </SectionCard>
 
           <SectionCard value="taxes" icon={Receipt} title="Taxes & Charges" description="Calculated into the payable total" accent="amber" complete={state.charges.length > 0}>
-            <div>
-              <p className="mb-1.5 text-[12.5px] font-medium text-slate-500">Show on invoice</p>
-              <div className="flex flex-wrap gap-1.5">
-                <EyeChip label="GSTIN" on={state.showGstin} onToggle={(v) => update('showGstin', v)} />
-                <EyeChip label="SAC/HSN" on={state.showSac} onToggle={(v) => update('showSac', v)} />
-                <EyeChip label="Qty column" on={state.showQty} onToggle={(v) => update('showQty', v)} />
-              </div>
-            </div>
             <ChargesEditor charges={state.charges} onChange={(c) => update('charges', c)} />
-            <Field label="Discount amount" type="number" min={0} step={0.01} value={state.discount} onChange={(e) => update('discount', parseFloat(e.target.value) || 0)} />
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-[12.5px] font-medium text-slate-500">Discount</span>
+                <EyeChip label="Discount" on={state.showDiscount} onToggle={(v) => update('showDiscount', v)} />
+              </div>
+              {state.showDiscount && (
+                <Field label="Discount amount" type="number" min={0} step={0.01} value={state.discount} onChange={(e) => update('discount', parseFloat(e.target.value) || 0)} />
+              )}
+            </div>
           </SectionCard>
 
           <SectionCard value="notes" icon={NotebookPen} title="Notes" description="Payment terms shown on the invoice" accent="pink" complete={state.notes.length > 0}>
@@ -418,6 +483,25 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             {state.currency} {fmt2(total)}
           </span>
         </div>
+        {session && !isAdmin && (
+          <div className="mb-2.5 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+            <span className="text-[12px] font-medium text-slate-500">Approval</span>
+            <span
+              className={
+                'rounded-full px-2.5 py-0.5 text-[11px] font-bold capitalize ' +
+                (state.status === 'approved'
+                  ? 'bg-emerald-100 text-emerald-600'
+                  : state.status === 'pending'
+                    ? 'bg-blue-100 text-blue-600'
+                    : state.status === 'rejected'
+                      ? 'bg-rose-100 text-rose-600'
+                      : 'bg-slate-200 text-slate-500')
+              }
+            >
+              {state.status}
+            </span>
+          </div>
+        )}
         {session && (
           <div className="mb-2.5 flex gap-2">
             <button
@@ -440,6 +524,30 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             </button>
           </div>
         )}
+        {session && (
+          <div className="mb-2.5 flex gap-2">
+            <button
+              type="button"
+              onClick={() => runReview(false)}
+              disabled={cloudBusy}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-brand/25 bg-brand/5 py-2.5 text-[12.5px] font-bold text-brand-deep transition-all duration-150 hover:bg-brand/10 active:scale-[0.99] disabled:opacity-60"
+            >
+              <Sparkles size={14} />
+              AI Review
+            </button>
+            {!isAdmin && state.status !== 'approved' && state.status !== 'pending' && (
+              <button
+                type="button"
+                onClick={() => runReview(true)}
+                disabled={cloudBusy}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 py-2.5 text-[12.5px] font-bold text-blue-700 transition-all duration-150 hover:bg-blue-100 active:scale-[0.99] disabled:opacity-60"
+              >
+                <Send size={14} />
+                Send for approval
+              </button>
+            )}
+          </div>
+        )}
         {cloudMsg && (
           <p className="mb-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-center text-[12px] font-semibold text-emerald-600">
             {cloudMsg}
@@ -448,16 +556,27 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
         <button
           type="button"
           onClick={downloadPDF}
-          disabled={downloading}
+          disabled={downloading || !canDownload}
+          title={canDownload ? undefined : 'Waiting for admin approval'}
           className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-deep to-brand py-3 text-[14px] font-bold text-white shadow-lg shadow-brand/25 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-brand/30 active:translate-y-0 active:scale-[0.99] disabled:cursor-wait disabled:opacity-60 disabled:hover:translate-y-0"
         >
           <Download size={16} />
-          {downloading ? 'Generating…' : 'Download PDF'}
+          {downloading ? 'Generating…' : canDownload ? 'Download PDF' : 'Awaiting approval'}
         </button>
         <p className="mt-2 text-center text-[11px] text-slate-400">
           Ctrl+S save · Ctrl+Enter download
         </p>
       </div>
+
+      <ReviewModal
+        open={reviewOpen}
+        loading={reviewLoading}
+        review={review}
+        error={reviewError}
+        onClose={() => setReviewOpen(false)}
+        onProceed={reviewThenSubmit ? submitForApproval : undefined}
+        proceedLabel="Send for approval"
+      />
     </div>
   );
 }

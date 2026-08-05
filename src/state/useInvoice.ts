@@ -39,6 +39,7 @@ const DEFAULT_STATE: InvoiceState = {
   showGstin: true,
   showSac: true,
   showQty: true,
+  showDiscount: true,
   charges: [{ id: 'gst', label: 'GST', kind: 'percent', value: 18 }],
 
   byName: 'Betelgeuse Global',

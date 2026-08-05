@@ -11,7 +11,7 @@ export type SignMode = 'type' | 'upload';
 
 export type EntityRegion = 'IN' | 'UK' | 'US';
 
-export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'void';
+export type InvoiceStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'sent' | 'paid' | 'overdue' | 'void';
 
 export interface CustomField {
   id: string;
@@ -51,6 +51,7 @@ export interface InvoiceState {
   showGstin: boolean;
   showSac: boolean;
   showQty: boolean;
+  showDiscount: boolean;
   charges: Charge[];
 
   byName: string;
