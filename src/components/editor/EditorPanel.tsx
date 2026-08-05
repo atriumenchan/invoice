@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as Accordion from '@radix-ui/react-accordion';
 import {
@@ -20,7 +20,7 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
-import type { EntityRegion, InvoiceStatus } from '../../types';
+import type { EntityRegion, InvoiceState, InvoiceStatus } from '../../types';
 import type { InvoiceApi } from '../../state/useInvoice';
 import { computeTotals, fmt2 } from '../../lib/calc';
 import { useAuth } from '../../state/AuthContext';
@@ -118,6 +118,36 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, state.invoiceId]);
+
+  /* real-time cloud auto-save for non-admins once the invoice exists */
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const baselineRef = useRef('');
+  const contentKey = (s: InvoiceState) => JSON.stringify({ ...s, status: undefined });
+
+  useEffect(() => {
+    baselineRef.current = contentKey(stateRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.invoiceId]);
+
+  useEffect(() => {
+    if (!session || isAdmin || !state.invoiceId) return;
+    if (contentKey(state) === baselineRef.current) return;
+    const t = setTimeout(async () => {
+      const s = stateRef.current;
+      if (contentKey(s) === baselineRef.current) return;
+      const status = s.status === 'approved' ? 'pending' : s.status;
+      try {
+        await saveInvoiceToCloud({ ...s, status });
+        baselineRef.current = contentKey(s);
+        if (status !== s.status) update('status', status);
+      } catch (e) {
+        console.error('Auto-save failed', e);
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, isAdmin, state]);
 
   const flash = (msg: string) => {
     setCloudMsg(msg);
@@ -516,16 +546,18 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
         )}
         {session && (
           <div className="mb-2.5 flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onSaveInvoice}
-              disabled={cloudBusy}
-              title={state.invoiceId ? `Update ${state.invNo}` : 'Save invoice'}
-              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#E8ECF4] bg-white text-[12px] font-semibold text-slate-600 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.97] disabled:opacity-60"
-            >
-              <Save size={14} />
-              <span className="truncate">{cloudBusy ? 'Saving…' : state.invoiceId ? 'Update' : 'Save'}</span>
-            </button>
+            {(isAdmin || !state.invoiceId) && (
+              <button
+                type="button"
+                onClick={onSaveInvoice}
+                disabled={cloudBusy}
+                title={state.invoiceId ? `Update ${state.invNo}` : 'Save invoice'}
+                className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#E8ECF4] bg-white text-[12px] font-semibold text-slate-600 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.97] disabled:opacity-60"
+              >
+                <Save size={14} />
+                <span className="truncate">{cloudBusy ? 'Saving…' : state.invoiceId ? 'Update' : 'Save'}</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={onSaveTemplate}
