@@ -224,7 +224,15 @@ export function useInvoice() {
           const block = cloned.querySelector<HTMLElement>('.logo-block');
           if (block) block.style.gap = '18px';
           const word = cloned.querySelector<HTMLElement>('.logo-word');
-          if (word) word.style.marginLeft = '2px';
+          if (word) {
+            word.style.marginLeft = '2px';
+            /* html2canvas has incomplete text-layout support for custom
+               line-height with web fonts: it consistently renders this
+               wordmark ~8.5px lower than real browsers do, even though
+               the live preview is pixel-perfect. Compensate only for the
+               PDF capture (verified empirically against the icon mark). */
+            word.style.transform = 'translateY(-8.5px)';
+          }
         },
       });
       const imgData = canvas.toDataURL('image/png');

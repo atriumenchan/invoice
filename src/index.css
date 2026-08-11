@@ -124,11 +124,10 @@ body {
   font-weight: 800;
   font-size: 26px;
   letter-spacing: 0.2px;
-  /* match the icon's height and center within it, so glyph metrics
-     (not the raw line-box) end up vertically centered against the mark */
-  height: 46px;
-  display: flex;
-  align-items: center;
+  /* match the icon's height via line-height (not flex: html2canvas has
+     incomplete flexbox support and mis-centers align-items in the PDF
+     capture even though real browsers render it correctly) */
+  line-height: 46px;
   /* keep wordmark clear of the mark in screen + PDF capture */
   margin-left: 2px;
 }
