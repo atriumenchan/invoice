@@ -203,7 +203,21 @@ export function useInvoice() {
     if (!node || downloading) return;
     setDownloading(true);
     try {
-      const canvas = await html2canvas(node, { scale: 2, useCORS: true });
+      const canvas = await html2canvas(node, {
+        scale: 2,
+        useCORS: true,
+        onclone: (doc) => {
+          // html2canvas can't clip backgrounds to text, so the gradient "AD" in the
+          // logo would render as a solid box in the PDF. Render it as solid text instead.
+          const ad = doc.querySelector<HTMLElement>('.logo-word .ad');
+          if (ad) {
+            ad.style.background = 'none';
+            ad.style.webkitBackgroundClip = 'initial';
+            ad.style.backgroundClip = 'initial';
+            ad.style.color = '#8a5cf5';
+          }
+        },
+      });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'pt', 'a4');
       const pageWidth = pdf.internal.pageSize.getWidth();
