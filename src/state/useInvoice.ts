@@ -206,16 +206,25 @@ export function useInvoice() {
       const canvas = await html2canvas(node, {
         scale: 2,
         useCORS: true,
-        onclone: (doc) => {
-          // html2canvas can't clip backgrounds to text, so the gradient "AD" in the
-          // logo would render as a solid box in the PDF. Render it as solid text instead.
-          const ad = doc.querySelector<HTMLElement>('.logo-word .ad');
+        onclone: (_doc, cloned) => {
+          /* Force wordmark text styles so PDF never gets the gradient-as-box artifact */
+          const ad = cloned.querySelector<HTMLElement>('.logo-word .ad');
           if (ad) {
             ad.style.background = 'none';
-            ad.style.webkitBackgroundClip = 'initial';
-            ad.style.backgroundClip = 'initial';
+            ad.style.setProperty('-webkit-background-clip', 'border-box');
+            ad.style.backgroundClip = 'border-box';
+            ad.style.setProperty('-webkit-text-fill-color', '#8a5cf5');
             ad.style.color = '#8a5cf5';
           }
+          const mexo = cloned.querySelector<HTMLElement>('.logo-word .mexo');
+          if (mexo) {
+            mexo.style.setProperty('-webkit-text-fill-color', '#15182b');
+            mexo.style.color = '#15182b';
+          }
+          const block = cloned.querySelector<HTMLElement>('.logo-block');
+          if (block) block.style.gap = '18px';
+          const word = cloned.querySelector<HTMLElement>('.logo-word');
+          if (word) word.style.marginLeft = '2px';
         },
       });
       const imgData = canvas.toDataURL('image/png');

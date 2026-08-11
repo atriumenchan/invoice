@@ -111,27 +111,34 @@ body {
 #invoice .logo-block {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 18px;
 }
 #invoice .logo-block img {
   width: 46px;
   height: 46px;
   display: block;
+  flex-shrink: 0;
 }
 #invoice .logo-word {
   font-family: 'Poppins', sans-serif;
   font-weight: 800;
   font-size: 26px;
   letter-spacing: 0.2px;
+  line-height: 1;
+  /* keep wordmark clear of the mark in screen + PDF capture */
+  margin-left: 2px;
 }
 #invoice .logo-word .ad {
-  background: linear-gradient(120deg, #3fb7f0, #8a5cf5);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  /* solid color only — html2canvas can't clip gradients to text (renders AD as a filled box in the PDF) */
+  background: none !important;
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+  -webkit-text-fill-color: #8a5cf5;
+  color: #8a5cf5;
 }
 #invoice .logo-word .mexo {
   color: #15182b;
+  -webkit-text-fill-color: #15182b;
 }
 #invoice .issued-by {
   font-size: 12px;
