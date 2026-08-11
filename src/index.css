@@ -124,7 +124,11 @@ body {
   font-weight: 800;
   font-size: 26px;
   letter-spacing: 0.2px;
-  line-height: 1;
+  /* match the icon's height and center within it, so glyph metrics
+     (not the raw line-box) end up vertically centered against the mark */
+  height: 46px;
+  display: flex;
+  align-items: center;
   /* keep wordmark clear of the mark in screen + PDF capture */
   margin-left: 2px;
 }
