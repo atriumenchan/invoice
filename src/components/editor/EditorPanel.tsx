@@ -44,6 +44,7 @@ import { reviewInvoice, type ReviewResult } from '../../lib/ai';
 import { getInvoiceStatus, setInvoiceStatus } from '../../lib/db';
 import { LineItemsSection } from './LineItemsSection';
 import { SignatureSection } from './SignatureSection';
+import { LogoUpload } from './LogoUpload';
 import { CustomFields } from './CustomFields';
 import { ChargesEditor } from './ChargesEditor';
 
@@ -348,6 +349,10 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           </SectionCard>
 
           <SectionCard value="seller" icon={Building2} title="Seller" description="Who is issuing this invoice" accent="sky" complete={Boolean(state.byName && state.byAddress)}>
+            <div>
+              <span className="mb-1.5 block text-[12.5px] font-medium text-slate-500">Logo</span>
+              <LogoUpload state={state} update={update} />
+            </div>
             <Field label="Entity name" value={state.byName} onChange={(e) => update('byName', e.target.value)} />
             <Field label="Sub-line (e.g. brand)" value={state.bySub} onChange={(e) => update('bySub', e.target.value)} />
             <TextArea label="Address" value={state.byAddress} onChange={(e) => update('byAddress', e.target.value)} />
