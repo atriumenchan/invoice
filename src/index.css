@@ -119,12 +119,6 @@ body {
   display: block;
   flex-shrink: 0;
 }
-#invoice .logo-block img.logo-custom {
-  width: auto;
-  height: 46px;
-  max-width: 220px;
-  object-fit: contain;
-}
 #invoice .logo-word {
   font-family: 'Poppins', sans-serif;
   font-weight: 800;

@@ -27,17 +27,11 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
         <div className="head-row">
           <div>
             <div className="logo-block">
-              {s.logoImage ? (
-                <img src={s.logoImage} alt="Company logo" className="logo-custom" />
-              ) : (
-                <>
-                  <img src={LOGO_DATA_URI} alt="ADMEXO logo" />
-                  <div className="logo-word">
-                    <span className="ad">AD</span>
-                    <span className="mexo">MEXO</span>
-                  </div>
-                </>
-              )}
+              <img src={LOGO_DATA_URI} alt="ADMEXO logo" />
+              <div className="logo-word">
+                <span className="ad">AD</span>
+                <span className="mexo">MEXO</span>
+              </div>
             </div>
           </div>
           <div className="tax-title">

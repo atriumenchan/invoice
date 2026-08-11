@@ -54,7 +54,6 @@ const DEFAULT_STATE: InvoiceState = {
   byGstin: '09CBJPM0018A1Z6',
   bySac: '998361',
   byCustom: [],
-  logoImage: null,
 
   toName: 'Collegedunia Web Pvt Ltd',
   toAttn: 'Abhishek Agrawal',

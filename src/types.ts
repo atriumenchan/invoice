@@ -60,8 +60,6 @@ export interface InvoiceState {
   byGstin: string;
   bySac: string;
   byCustom: CustomField[];
-  /** custom uploaded logo (data URI); falls back to the default ADMEXO mark when null */
-  logoImage: string | null;
 
   toName: string;
   toAttn: string;
