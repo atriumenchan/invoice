@@ -277,6 +277,9 @@ body {
   letter-spacing: 0.04em;
   font-weight: 700;
 }
+#invoice table.items thead th.right {
+  text-align: right;
+}
 #invoice table.items td {
   padding: 12px;
   border-bottom: 1px solid var(--line);

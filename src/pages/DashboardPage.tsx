@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
+  Clock,
   Copy,
   FilePlus2,
   FileText,
@@ -53,14 +54,36 @@ interface ManagedUser {
   last_sign_in_at: string | null;
 }
 
+type Tab = 'invoices' | 'approvals' | 'templates' | 'users';
+
 export default function DashboardPage() {
   const { session, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<'invoices' | 'templates' | 'users'>('invoices');
+  const [tab, setTab] = useState<Tab>('invoices');
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | InvoiceStatus>('all');
+
+  const pendingInvoices = useMemo(
+    () =>
+      invoices
+        .filter((r) => r.status === 'pending')
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    [invoices]
+  );
+
+  const statusCounts = useMemo(() => {
+    const counts: Partial<Record<InvoiceStatus, number>> = {};
+    for (const row of invoices) counts[row.status as InvoiceStatus] = (counts[row.status as InvoiceStatus] ?? 0) + 1;
+    return counts;
+  }, [invoices]);
+
+  const filteredInvoices = useMemo(
+    () => (statusFilter === 'all' ? invoices : invoices.filter((r) => r.status === statusFilter)),
+    [invoices, statusFilter]
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -146,6 +169,75 @@ export default function DashboardPage() {
     load();
   };
 
+  const renderInvoiceCard = (row: InvoiceRow) => (
+    <div
+      key={row.id}
+      className="flex items-center gap-3 rounded-2xl border border-[#E8ECF4] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)]"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+        <FileText size={16} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[14px] font-semibold text-slate-900">
+          {row.title || row.invoice_no}
+          <span className="ml-2 text-[12px] font-medium text-slate-400">{row.invoice_no}</span>
+        </p>
+        <p className="truncate text-[12px] text-slate-500">
+          {row.state?.toName || 'No client'} · {new Date(row.created_at).toLocaleDateString()}
+          {isAdmin && row.created_by_email ? ` · ${row.created_by_email}` : ''}
+        </p>
+      </div>
+      <span
+        className={cn(
+          'shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold capitalize',
+          STATUS_STYLES[row.status] ?? STATUS_STYLES.draft
+        )}
+      >
+        {row.status}
+      </span>
+      <span className="shrink-0 text-[13.5px] font-bold tabular-nums text-slate-900">
+        {row.currency} {Number(row.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+      </span>
+      {isAdmin && row.status === 'pending' && (
+        <>
+          <button
+            type="button"
+            title="Approve"
+            onClick={() => moderate(row, 'approved')}
+            className="icon-btn bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+          >
+            <Check size={14} />
+          </button>
+          <button
+            type="button"
+            title="Reject"
+            onClick={() => moderate(row, 'rejected')}
+            className="icon-btn bg-rose-50 text-rose-500 hover:bg-rose-100"
+          >
+            <X size={14} />
+          </button>
+        </>
+      )}
+      <button type="button" title="Rename" onClick={() => renameInvoiceRow(row)} className="icon-btn">
+        <Pencil size={14} />
+      </button>
+      <button type="button" title="Open in builder" onClick={() => openInvoice(row)} className="icon-btn">
+        <FileText size={14} />
+      </button>
+      <button type="button" title="Email invoice" onClick={() => emailInvoice(row)} className="icon-btn">
+        <Mail size={14} />
+      </button>
+      <button
+        type="button"
+        title="Delete"
+        onClick={() => removeInvoice(row)}
+        className="icon-btn hover:bg-rose-50 hover:text-rose-500"
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       <header className="border-b border-[#E8ECF4] bg-white/80 backdrop-blur">
@@ -177,17 +269,29 @@ export default function DashboardPage() {
 
       <main className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-6 inline-flex rounded-full bg-slate-100 p-1">
-          {(['invoices', 'templates', ...(isAdmin ? (['users'] as const) : [])] as const).map((t) => (
+          {(
+            [
+              'invoices',
+              ...(isAdmin ? (['approvals'] as const) : []),
+              'templates',
+              ...(isAdmin ? (['users'] as const) : []),
+            ] as const
+          ).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={cn(
-                'rounded-full px-4 py-1.5 text-[13px] font-semibold capitalize transition-all duration-150',
+                'flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[13px] font-semibold capitalize transition-all duration-150',
                 tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               )}
             >
               {t}
+              {t === 'approvals' && pendingInvoices.length > 0 && (
+                <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10.5px] font-bold text-white">
+                  {pendingInvoices.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -200,6 +304,19 @@ export default function DashboardPage() {
           <p className="rounded-xl bg-rose-50 px-4 py-3 text-[13px] font-medium text-rose-600">{error}</p>
         ) : tab === 'users' && isAdmin ? (
           <UsersPanel />
+        ) : tab === 'approvals' && isAdmin ? (
+          <div className="space-y-3">
+            <p className="text-[12.5px] font-medium text-slate-500">
+              {pendingInvoices.length === 0
+                ? 'Nothing waiting on you.'
+                : `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'} waiting for approval, oldest first`}
+            </p>
+            {pendingInvoices.length === 0 ? (
+              <EmptyState icon={<Clock size={20} />} title="All caught up" desc="Invoices sent for approval will show up here." />
+            ) : (
+              <div className="space-y-2.5">{pendingInvoices.map((row) => renderInvoiceCard(row))}</div>
+            )}
+          </div>
         ) : tab === 'invoices' ? (
           invoices.length === 0 ? (
             <EmptyState
@@ -208,75 +325,26 @@ export default function DashboardPage() {
               desc="Create one in the builder and hit Save invoice — it will appear here."
             />
           ) : (
-            <div className="space-y-2.5">
-              {invoices.map((row) => (
-                <div
-                  key={row.id}
-                  className="flex items-center gap-3 rounded-2xl border border-[#E8ECF4] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)]"
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
-                    <FileText size={16} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-semibold text-slate-900">
-                      {row.title || row.invoice_no}
-                      <span className="ml-2 text-[12px] font-medium text-slate-400">{row.invoice_no}</span>
-                    </p>
-                    <p className="truncate text-[12px] text-slate-500">
-                      {row.state?.toName || 'No client'} · {new Date(row.created_at).toLocaleDateString()}
-                      {isAdmin && row.created_by_email ? ` · ${row.created_by_email}` : ''}
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      'shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold capitalize',
-                      STATUS_STYLES[row.status] ?? STATUS_STYLES.draft
-                    )}
-                  >
-                    {row.status}
-                  </span>
-                  <span className="shrink-0 text-[13.5px] font-bold tabular-nums text-slate-900">
-                    {row.currency} {Number(row.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </span>
-                  {isAdmin && row.status === 'pending' && (
-                    <>
-                      <button
-                        type="button"
-                        title="Approve"
-                        onClick={() => moderate(row, 'approved')}
-                        className="icon-btn bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
-                      >
-                        <Check size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        title="Reject"
-                        onClick={() => moderate(row, 'rejected')}
-                        className="icon-btn bg-rose-50 text-rose-500 hover:bg-rose-100"
-                      >
-                        <X size={14} />
-                      </button>
-                    </>
-                  )}
-                  <button type="button" title="Rename" onClick={() => renameInvoiceRow(row)} className="icon-btn">
-                    <Pencil size={14} />
-                  </button>
-                  <button type="button" title="Open in builder" onClick={() => openInvoice(row)} className="icon-btn">
-                    <FileText size={14} />
-                  </button>
-                  <button type="button" title="Email invoice" onClick={() => emailInvoice(row)} className="icon-btn">
-                    <Mail size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    title="Delete"
-                    onClick={() => removeInvoice(row)}
-                    className="icon-btn hover:bg-rose-50 hover:text-rose-500"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-1.5">
+                <FilterChip label="All" count={invoices.length} active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
+                {(Object.keys(STATUS_STYLES) as InvoiceStatus[])
+                  .filter((s) => statusCounts[s])
+                  .map((s) => (
+                    <FilterChip
+                      key={s}
+                      label={s}
+                      count={statusCounts[s] ?? 0}
+                      active={statusFilter === s}
+                      onClick={() => setStatusFilter(s)}
+                    />
+                  ))}
+              </div>
+              {filteredInvoices.length === 0 ? (
+                <EmptyState icon={<FileText size={20} />} title="No invoices in this filter" desc="Try a different status." />
+              ) : (
+                <div className="space-y-2.5">{filteredInvoices.map((row) => renderInvoiceCard(row))}</div>
+              )}
             </div>
           )
         ) : templates.length === 0 ? (
@@ -329,6 +397,33 @@ export default function DashboardPage() {
         )}
       </main>
     </div>
+  );
+}
+
+function FilterChip({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-full border px-3 py-1 text-[12px] font-semibold capitalize transition-all duration-150',
+        active
+          ? 'border-brand bg-brand/10 text-brand-deep'
+          : 'border-[#E8ECF4] bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
+      )}
+    >
+      {label} <span className="text-slate-400">{count}</span>
+    </button>
   );
 }
 

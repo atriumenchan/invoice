@@ -155,11 +155,52 @@ export async function saveBank(s: InvoiceState): Promise<string> {
   return data.id as string;
 }
 
-/* ---------- invoice numbering ---------- */
+/* ---------- invoice numbering (centralized & globally unique) ---------- */
+
+/**
+ * Atomically allocates the next free invoice number for a prefix. The
+ * server-side function skips over any number that's already used by
+ * ANY user (not just the caller), so numbers are a single, centralized
+ * sequence — never reused, exactly like an employee ID.
+ */
 export async function nextInvoiceNumber(prefix: string): Promise<string> {
   const { data, error } = await supabase.rpc('next_invoice_number', { p_prefix: prefix });
   if (error) throw error;
   return data as string;
+}
+
+/** True if `number` is free to use (globally, across every user's invoices). */
+export async function checkInvoiceNumberAvailable(number: string, excludeId?: string | null): Promise<boolean> {
+  const { data, error } = await supabase.rpc('check_invoice_number', {
+    p_number: number,
+    p_exclude_id: excludeId ?? null,
+  });
+  if (error) throw error;
+  return data as boolean;
+}
+
+/** Finds the nearest free number after `number` (same prefix/pattern, numeric suffix + 1, + 2, ...). */
+export async function suggestInvoiceNumber(number: string, excludeId?: string | null): Promise<string> {
+  const { data, error } = await supabase.rpc('suggest_invoice_number', {
+    p_number: number,
+    p_exclude_id: excludeId ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+function isDuplicateInvoiceNoError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return error.code === '23505' && /invoice_no/i.test(error.message ?? '');
+}
+
+async function duplicateInvoiceNoError(invoiceNo: string, excludeId: string | null): Promise<Error> {
+  try {
+    const suggestion = await suggestInvoiceNumber(invoiceNo, excludeId);
+    return new Error(`Invoice number "${invoiceNo}" is already used. Try "${suggestion}" instead.`);
+  } catch {
+    return new Error(`Invoice number "${invoiceNo}" is already used. Please choose a different number.`);
+  }
 }
 
 /* ---------- invoices ---------- */
@@ -168,7 +209,16 @@ export async function saveInvoiceToCloud(s: InvoiceState, opts?: { title?: strin
   if (!auth.user) throw new Error('Not signed in');
   const user_id = auth.user.id;
   const t = computeTotals(s);
-  const invoice_no = s.invoiceId ? s.invNo : await nextInvoiceNumber(s.invPrefix || 'INV');
+
+  let invoice_no: string;
+  if (s.invoiceId) {
+    invoice_no = s.invNo;
+  } else {
+    // the untouched default placeholder always starts with '#' — anything
+    // else means the user deliberately typed their own number, so respect it
+    const manual = (s.invNo || '').trim();
+    invoice_no = !manual || manual.startsWith('#') ? await nextInvoiceNumber(s.invPrefix || 'INV') : manual;
+  }
   const stateToStore = s.invoiceId ? s : { ...s, invNo: invoice_no };
   const row = {
     invoice_no,
@@ -186,8 +236,16 @@ export async function saveInvoiceToCloud(s: InvoiceState, opts?: { title?: strin
   if (s.invoiceId) {
     // never touch user_id / created_by_email on update — an admin editing
     // someone else's invoice must not take ownership of it
-    const { error } = await supabase.from('invoices').update(row).eq('id', s.invoiceId);
-    if (error) throw error;
+    const { data, error } = await supabase.from('invoices').update(row).eq('id', s.invoiceId).select('id');
+    if (error) {
+      if (isDuplicateInvoiceNoError(error)) throw await duplicateInvoiceNoError(invoice_no, s.invoiceId);
+      throw error;
+    }
+    if (!data || data.length === 0) {
+      throw new Error(
+        'This invoice could not be updated — it may belong to a different account or have been deleted. Please start a new invoice.'
+      );
+    }
     return { id: s.invoiceId, invoice_no };
   }
   const { data, error } = await supabase
@@ -195,7 +253,10 @@ export async function saveInvoiceToCloud(s: InvoiceState, opts?: { title?: strin
     .insert({ ...row, user_id, created_by_email: auth.user.email ?? null })
     .select('id')
     .single();
-  if (error) throw error;
+  if (error) {
+    if (isDuplicateInvoiceNoError(error)) throw await duplicateInvoiceNoError(invoice_no, null);
+    throw error;
+  }
   return { id: data.id as string, invoice_no };
 }
 
@@ -223,8 +284,11 @@ export async function setInvoiceStatus(id: string, status: 'pending' | 'approved
     const { data } = await supabase.auth.getUser();
     patch.approved_by = data.user?.email ?? null;
   }
-  const { error } = await supabase.from('invoices').update(patch).eq('id', id);
+  const { data, error } = await supabase.from('invoices').update(patch).eq('id', id).select('id');
   if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error('This invoice could not be found or you do not have permission to update it.');
+  }
 }
 
 export async function renameInvoice(id: string, title: string): Promise<void> {

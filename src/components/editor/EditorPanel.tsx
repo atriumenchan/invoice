@@ -44,6 +44,7 @@ import { reviewInvoice, type ReviewResult } from '../../lib/ai';
 import { getInvoiceStatus, setInvoiceStatus } from '../../lib/db';
 import { LineItemsSection } from './LineItemsSection';
 import { SignatureSection } from './SignatureSection';
+import { InvoiceNumberField } from './InvoiceNumberField';
 import { CustomFields } from './CustomFields';
 import { ChargesEditor } from './ChargesEditor';
 
@@ -330,7 +331,12 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               <option value="US">United States — No tax · USD</option>
             </Select>
             <Field label="Document title" value={state.docTitle} onChange={(e) => update('docTitle', e.target.value)} />
-            <Field label="Invoice number" value={state.invNo} onChange={(e) => update('invNo', e.target.value)} />
+            <InvoiceNumberField
+              value={state.invNo}
+              invoiceId={state.invoiceId}
+              signedIn={Boolean(session)}
+              onChange={(v) => update('invNo', v)}
+            />
             <div className="grid grid-cols-2 gap-2.5">
               <Field label="Invoice date" value={state.invDate} onChange={(e) => update('invDate', e.target.value)} />
               <Field label="Due date" value={state.dueDate} onChange={(e) => update('dueDate', e.target.value)} />
