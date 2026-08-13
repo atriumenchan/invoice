@@ -208,7 +208,14 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
         <div className="sign-card">
           <div className="sig-block">
             {s.showStamp && (
-              <div className="stamp" aria-hidden="true">
+              <div
+                className="stamp"
+                aria-hidden="true"
+                style={{
+                  opacity: Math.max(0, Math.min(100, s.stampOpacity ?? 46)) / 100,
+                  transform: `rotate(${s.stampRotate ?? 0}deg)`,
+                }}
+              >
                 <div className="stamp-line1">For Betelgeuse Global</div>
                 <div className="stamp-line2">Accounts</div>
               </div>

@@ -19,6 +19,8 @@ import {
   Sparkles,
   Trash2,
   User,
+  Droplets,
+  RotateCw,
 } from 'lucide-react';
 import type { EntityRegion, InvoiceState, InvoiceStatus } from '../../types';
 import type { InvoiceApi } from '../../state/useInvoice';
@@ -41,7 +43,7 @@ import {
   type IssuerRow,
 } from '../../lib/db';
 import { SectionCard } from './SectionCard';
-import { EyeChip, Field, Select, Switch, TextArea } from './Field';
+import { EyeChip, Field, MiniStepper, Select, Switch, TextArea } from './Field';
 import { ReviewModal } from '../ReviewModal';
 import { reviewInvoice, type ReviewResult } from '../../lib/ai';
 import { getInvoiceStatus } from '../../lib/db';
@@ -550,6 +552,30 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
               <Switch label="Show signature on invoice" checked={state.showSignature} onChange={(v) => update('showSignature', v)} />
               <Switch label="Show For Betelgeuse Global Accounts stamp" checked={state.showStamp} onChange={(v) => update('showStamp', v)} />
+              {state.showStamp && (
+                <div className="flex items-center justify-end gap-2.5 px-1 pb-0.5">
+                  <MiniStepper
+                    label="Stamp opacity"
+                    icon={<Droplets size={10} strokeWidth={2.2} />}
+                    value={state.stampOpacity}
+                    suffix="%"
+                    step={5}
+                    min={0}
+                    max={100}
+                    onChange={(n) => update('stampOpacity', n)}
+                  />
+                  <MiniStepper
+                    label="Stamp angle"
+                    icon={<RotateCw size={10} strokeWidth={2.2} />}
+                    value={state.stampRotate}
+                    suffix="°"
+                    step={1}
+                    min={-45}
+                    max={45}
+                    onChange={(n) => update('stampRotate', n)}
+                  />
+                </div>
+              )}
             </div>
             <SignatureSection state={state} update={update} />
           </SectionCard>

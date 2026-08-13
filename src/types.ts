@@ -48,6 +48,8 @@ export interface InvoiceState {
   showWords: boolean;
   showSignature: boolean;
   showStamp: boolean;
+  stampOpacity: number;
+  stampRotate: number;
   showFooter: boolean;
 
   showGstin: boolean;

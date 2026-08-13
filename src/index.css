@@ -437,7 +437,7 @@ body {
   right: 0;
   left: 0;
   pointer-events: none;
-  color: rgba(107, 78, 196, 0.46);
+  color: #6b4ec4;
   font-weight: 800;
   font-size: 30px;
   letter-spacing: -0.03em;
@@ -446,6 +446,7 @@ body {
   flex-direction: column;
   gap: 0;
   mix-blend-mode: multiply;
+  transform-origin: center center;
 }
 #invoice .sign-card .stamp-line1 {
   white-space: nowrap;

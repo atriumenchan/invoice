@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../state/AuthContext';
-import { STORAGE_KEY } from '../state/useInvoice';
+import { STORAGE_KEY, hydrateInvoiceState } from '../state/useInvoice';
 import { supabase } from '../lib/supabase';
 import {
   cloneTemplateAsInvoice,
@@ -127,13 +127,15 @@ export default function DashboardPage() {
   const openInvoice = (row: InvoiceRow) => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({
-        ...row.state,
-        invoiceId: row.id,
-        invNo: row.invoice_no,
-        status: row.status as InvoiceStatus,
-        createdByEmail: row.created_by_email,
-      })
+      JSON.stringify(
+        hydrateInvoiceState({
+          ...row.state,
+          invoiceId: row.id,
+          invNo: row.invoice_no,
+          status: row.status as InvoiceStatus,
+          createdByEmail: row.created_by_email,
+        })
+      )
     );
     navigate('/');
   };
@@ -188,7 +190,7 @@ export default function DashboardPage() {
   };
 
   const openTemplate = (row: TemplateRow) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...row.state, invoiceId: null }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(hydrateInvoiceState({ ...row.state, invoiceId: null })));
     navigate('/');
   };
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import type { EntityRegion, InvoiceState, LineItem } from '../types';
+import { readStampLast, writeStampLast } from '../lib/stampPrefs';
 
 export const STORAGE_KEY = 'admexo-invoice-v2';
 
@@ -42,6 +43,8 @@ const DEFAULT_STATE: InvoiceState = {
   showWords: true,
   showSignature: true,
   showStamp: true,
+  stampOpacity: 46,
+  stampRotate: 0,
   showFooter: true,
 
   showGstin: true,
@@ -104,14 +107,19 @@ const ENTITY_PRESETS: Record<EntityRegion, Partial<InvoiceState>> = {
 function loadInitial(): InvoiceState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return { ...DEFAULT_STATE, ...parsed };
-    }
+    if (raw) return hydrateInvoiceState(JSON.parse(raw));
   } catch {
     /* ignore corrupt cache */
   }
-  return DEFAULT_STATE;
+  return hydrateInvoiceState(null);
+}
+
+/** Fill missing fields from defaults + last-used stamp opacity/angle. */
+export function hydrateInvoiceState(partial?: Partial<InvoiceState> | null): InvoiceState {
+  const last = readStampLast();
+  const next: InvoiceState = { ...DEFAULT_STATE, ...last, ...(partial ?? {}) };
+  writeStampLast({ stampOpacity: next.stampOpacity, stampRotate: next.stampRotate });
+  return next;
 }
 
 export function useInvoice() {
@@ -122,7 +130,13 @@ export function useInvoice() {
   const previewRef = useRef<HTMLDivElement>(null);
 
   const update = useCallback(<K extends keyof InvoiceState>(key: K, value: InvoiceState[K]) => {
-    setState((s) => ({ ...s, [key]: value }));
+    setState((s) => {
+      const next = { ...s, [key]: value };
+      if (key === 'stampOpacity' || key === 'stampRotate') {
+        writeStampLast({ stampOpacity: next.stampOpacity, stampRotate: next.stampRotate });
+      }
+      return next;
+    });
     setDirty(true);
   }, []);
 
@@ -244,12 +258,6 @@ export function useInvoice() {
           cloned.querySelectorAll<HTMLElement>('.stamp, .sig .name, .sig img').forEach((el) => {
             el.style.mixBlendMode = 'normal';
           });
-          const stamp = cloned.querySelector<HTMLElement>('.stamp');
-          if (stamp) stamp.style.color = 'rgba(107, 78, 196, 0.42)';
-          const sigName = cloned.querySelector<HTMLElement>('.sig .name');
-          if (sigName) sigName.style.color = 'rgba(18, 22, 40, 0.88)';
-          const sigImg = cloned.querySelector<HTMLElement>('.sig img');
-          if (sigImg) sigImg.style.opacity = '0.88';
         },
       });
       const imgData = canvas.toDataURL('image/png');

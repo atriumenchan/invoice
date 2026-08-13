@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { computeTotals } from './calc';
 import type { CustomField, EntityRegion, InvoiceState, InvoiceStatus } from '../types';
+import { hydrateInvoiceState } from '../state/useInvoice';
 
 export interface IssuerRow {
   id: string;
@@ -407,7 +408,7 @@ export async function cloneTemplateAsInvoice(t: TemplateRow, existingTitles: str
     n += 1;
     title = `${base} copy ${n}`;
   }
-  const state: InvoiceState = { ...t.state, invoiceId: null };
+  const state: InvoiceState = hydrateInvoiceState({ ...t.state, invoiceId: null });
   const { id, invoice_no, status } = await saveInvoiceToCloud(state, { title });
   return {
     id,

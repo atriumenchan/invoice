@@ -4,7 +4,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Minus, Plus } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export const inputCls =
@@ -120,5 +120,55 @@ export function Switch({ checked, onChange, label }: SwitchProps) {
         />
       </span>
     </button>
+  );
+}
+
+export function MiniStepper({
+  icon,
+  value,
+  suffix,
+  step,
+  min,
+  max,
+  onChange,
+  label,
+}: {
+  icon: ReactNode;
+  value: number;
+  suffix: string;
+  step: number;
+  min: number;
+  max: number;
+  onChange: (n: number) => void;
+  label: string;
+}) {
+  const bump = (dir: -1 | 1) => {
+    const next = Math.round(value + dir * step);
+    onChange(Math.min(max, Math.max(min, next)));
+  };
+  return (
+    <div className="flex items-center gap-0.5 text-slate-400" title={label}>
+      {icon}
+      <button
+        type="button"
+        aria-label={`${label} down`}
+        onClick={() => bump(-1)}
+        className="flex h-4 w-4 items-center justify-center rounded hover:bg-slate-200 hover:text-slate-700"
+      >
+        <Minus size={9} strokeWidth={2.6} />
+      </button>
+      <span className="min-w-[2.15rem] text-center text-[10px] font-medium tabular-nums text-slate-500">
+        {value}
+        {suffix}
+      </span>
+      <button
+        type="button"
+        aria-label={`${label} up`}
+        onClick={() => bump(1)}
+        className="flex h-4 w-4 items-center justify-center rounded hover:bg-slate-200 hover:text-slate-700"
+      >
+        <Plus size={9} strokeWidth={2.6} />
+      </button>
+    </div>
   );
 }
