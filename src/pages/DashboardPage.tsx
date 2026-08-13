@@ -24,6 +24,7 @@ import {
   cloneTemplateAsInvoice,
   deleteInvoice,
   deleteTemplate,
+  invoiceCanBeModerated,
   invoiceNeedsApproval,
   isAdminEmail,
   listInvoices,
@@ -74,7 +75,7 @@ export default function DashboardPage() {
   const pendingInvoices = useMemo(
     () =>
       invoices
-        .filter((r) => invoiceNeedsApproval(r))
+        .filter((r) => invoiceCanBeModerated(r))
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     [invoices]
   );
@@ -240,12 +241,13 @@ export default function DashboardPage() {
           STATUS_STYLES[row.status] ?? STATUS_STYLES.draft
         )}
       >
-        {invoiceNeedsApproval(row) ? 'waiting for approval' : row.status}
+        {row.status === 'pending' || invoiceNeedsApproval(row) ? 'waiting for approval' : row.status}
       </span>
       <span className="shrink-0 text-[13.5px] font-bold tabular-nums text-slate-900">
-        {row.currency} {Number(row.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+        {row.currency}{' '}
+        {Number(row.total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </span>
-      {isAdmin && invoiceNeedsApproval(row) && (
+      {isAdmin && invoiceCanBeModerated(row) && (
         <>
           <button
             type="button"

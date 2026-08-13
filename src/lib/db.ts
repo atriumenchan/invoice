@@ -248,6 +248,12 @@ export function invoiceNeedsApproval(row: { status: string; created_by_email: st
   if (isAdminEmail(row.created_by_email)) return false;
   return row.status === 'pending';
 }
+
+/** Ryan can approve/reject any team invoice that is not already finished. His own invoices never need this. */
+export function invoiceCanBeModerated(row: { status: string; created_by_email: string | null }): boolean {
+  if (isAdminEmail(row.created_by_email)) return false;
+  return row.status !== 'approved' && row.status !== 'rejected' && row.status !== 'void';
+}
 function resolveSaveStatus(s: InvoiceState, saverEmail: string, opts?: { submit?: boolean }): InvoiceStatus {
   if (!isAdminEmail(saverEmail)) {
     if (opts?.submit) return 'pending';
