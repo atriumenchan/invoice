@@ -41,6 +41,7 @@ const DEFAULT_STATE: InvoiceState = {
   showNotes: true,
   showWords: true,
   showSignature: true,
+  showStamp: true,
   showFooter: true,
 
   showGstin: true,

@@ -206,12 +206,21 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
         )}
         {s.showSignature && (
         <div className="sign-card">
-          <div className="sig">
-            {useSignImage ? (
-              <img src={s.signImage!} alt="signature" />
-            ) : (
-              <div className="name" style={{ fontFamily: s.signFont }}>{s.signName}</div>
+          <div className="sig-block">
+            {s.showStamp && (
+              <div className="stamp" aria-hidden="true">
+                <span className="stamp-for">For</span>
+                <span className="stamp-co">Betelgeuse Global</span>
+                <span className="stamp-acc">Accounts</span>
+              </div>
             )}
+            <div className="sig">
+              {useSignImage ? (
+                <img src={s.signImage!} alt="signature" />
+              ) : (
+                <div className="name" style={{ fontFamily: s.signFont }}>{s.signName}</div>
+              )}
+            </div>
           </div>
           <div className="title">
             {useSignImage ? `${s.signName}  |  ${s.signTitle}` : s.signTitle}

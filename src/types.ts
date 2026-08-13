@@ -47,6 +47,7 @@ export interface InvoiceState {
   showNotes: boolean;
   showWords: boolean;
   showSignature: boolean;
+  showStamp: boolean;
   showFooter: boolean;
 
   showGstin: boolean;
