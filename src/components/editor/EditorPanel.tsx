@@ -389,7 +389,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
 
       {/* scrollable sections */}
       <div className="flex-1 overflow-y-auto px-4 py-5">
-        <Accordion.Root type="multiple" defaultValue={['invoice', 'seller', 'items']} className="space-y-4">
+        <Accordion.Root type="multiple" defaultValue={[]} className="space-y-4">
           <SectionCard value="invoice" icon={FileText} title="Invoice Details" description="Entity, number, dates, currency & badge" accent="indigo" complete={Boolean(state.invNo && state.invDate)}>
             {session && issuers.length > 0 && (
               <Select label="Issuer" value={state.issuerId ?? ''} onChange={(e) => applyIssuer(e.target.value)}>
