@@ -482,7 +482,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               </div>
             )}
             <Field label="Company name" value={state.toName} onChange={(e) => update('toName', e.target.value)} />
-            <Field label="Attn" value={state.toAttn} onChange={(e) => update('toAttn', e.target.value)} />
+            <Field label="Name" value={state.toAttn} onChange={(e) => update('toAttn', e.target.value)} />
             <div className="grid grid-cols-2 gap-2.5">
               <Field label="Phone" value={state.toPhone} onChange={(e) => update('toPhone', e.target.value)} />
               <Field label="Email" type="email" value={state.toEmail} onChange={(e) => update('toEmail', e.target.value)} />

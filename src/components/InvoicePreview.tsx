@@ -94,7 +94,7 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
           <div className="tag">BILLED TO</div>
           <div className="ent">{s.toName}</div>
           <p>
-            Attn: {s.toAttn} &nbsp;|&nbsp; {s.toPhone}
+            Name: {s.toAttn} &nbsp;|&nbsp; {s.toPhone}
           </p>
           <p>{s.toEmail}</p>
           <p style={{ whiteSpace: 'pre-line' }}>{s.toAddress}</p>
