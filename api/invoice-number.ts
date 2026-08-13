@@ -83,15 +83,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (action === 'check') {
     const number = String(body.number ?? '').trim().replace(/^#+/, '');
     if (!number) return res.status(400).json({ error: 'Missing number' });
-    const self = excludeId ? rows.find((r) => r.id === excludeId) : undefined;
-    if (self && normalizeInvoiceNo(self.invoice_no) === normalizeInvoiceNo(number)) {
-      return res.status(200).json({ available: true, grandfathered: true, suggestion: null });
-    }
+    const strict = Boolean(body.strict);
     const used = usedSet(rows, excludeId);
-    const available = !used.has(normalizeInvoiceNo(number));
+    const takenByOther = used.has(normalizeInvoiceNo(number));
+    const self = excludeId ? rows.find((r) => r.id === excludeId) : undefined;
+    const keepingOwn = Boolean(
+      !strict && self && normalizeInvoiceNo(self.invoice_no) === normalizeInvoiceNo(number)
+    );
+    const available = keepingOwn || !takenByOther;
     return res.status(200).json({
       available,
-      grandfathered: false,
+      grandfathered: keepingOwn,
       suggestion: available ? null : suggestFrom(number, used),
     });
   }

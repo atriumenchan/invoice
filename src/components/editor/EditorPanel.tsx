@@ -90,7 +90,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
 
   const onDownload = async () => {
     try {
-      await assertInvoiceNumberFree(state.invNo, state.invoiceId);
+      await assertInvoiceNumberFree(state.invNo, state.invoiceId, { strict: true });
       await downloadPDF();
     } catch (e) {
       if (!handleNumberError(e)) alert((e as Error).message);
@@ -350,6 +350,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               value={state.invNo}
               invoiceId={state.invoiceId}
               signedIn={Boolean(session)}
+              strict={isAdmin}
               onChange={(v) => update('invNo', v)}
             />
             <div className="grid grid-cols-2 gap-2.5">

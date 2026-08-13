@@ -191,9 +191,15 @@ export async function nextInvoiceNumber(prefix: string): Promise<string> {
 
 export async function checkInvoiceNumberAvailable(
   number: string,
-  excludeId?: string | null
+  excludeId?: string | null,
+  opts?: { strict?: boolean }
 ): Promise<{ available: boolean; suggestion: string | null; grandfathered: boolean }> {
-  const json = await numberingApi({ action: 'check', number, excludeId: excludeId ?? null });
+  const json = await numberingApi({
+    action: 'check',
+    number,
+    excludeId: excludeId ?? null,
+    strict: Boolean(opts?.strict),
+  });
   return {
     available: Boolean(json.available),
     suggestion: (json.suggestion as string | null) ?? null,
@@ -206,11 +212,15 @@ export async function suggestInvoiceNumber(number: string, excludeId?: string | 
   return json.suggestion as string;
 }
 
-/** Blocks a new/changed number that another invoice already has. Existing saved numbers are allowed to stay. */
-export async function assertInvoiceNumberFree(number: string, excludeId?: string | null): Promise<void> {
-  const trimmed = number.trim();
-  if (!trimmed || trimmed.startsWith('#')) return;
-  const result = await checkInvoiceNumberAvailable(trimmed, excludeId);
+/** Blocks a number another invoice already has. Deleted invoices free the number (they are gone from the DB). */
+export async function assertInvoiceNumberFree(
+  number: string,
+  excludeId?: string | null,
+  opts?: { strict?: boolean }
+): Promise<void> {
+  const trimmed = number.trim().replace(/^#+/, '');
+  if (!trimmed) return;
+  const result = await checkInvoiceNumberAvailable(trimmed, excludeId, opts);
   if (!result.available) throw new InvoiceNumberTakenError(trimmed, result.suggestion);
 }
 
@@ -262,11 +272,11 @@ export async function saveInvoiceToCloud(
   let invoice_no: string;
   if (s.invoiceId) {
     invoice_no = (s.invNo || '').trim().replace(/^#+/, '');
-    await assertInvoiceNumberFree(invoice_no, s.invoiceId);
+    await assertInvoiceNumberFree(invoice_no, s.invoiceId, { strict: status === 'approved' });
   } else {
     const manual = (s.invNo || '').trim();
     invoice_no = !manual || manual.startsWith('#') ? await nextInvoiceNumber(s.invPrefix || 'INV') : manual;
-    await assertInvoiceNumberFree(invoice_no, null);
+    await assertInvoiceNumberFree(invoice_no, null, { strict: true });
   }
   const stateToStore = {
     ...s,
@@ -328,7 +338,32 @@ export async function getInvoiceStatus(id: string): Promise<string | null> {
   return (data?.status as string) ?? null;
 }
 
+export async function assignInvoiceNumber(id: string, invoiceNo: string): Promise<void> {
+  const number = invoiceNo.trim().replace(/^#+/, '');
+  await assertInvoiceNumberFree(number, id, { strict: true });
+  const { data: row, error: readError } = await supabase.from('invoices').select('state').eq('id', id).maybeSingle();
+  if (readError) throw readError;
+  if (!row) throw new Error('Invoice not found');
+  const state = { ...((row.state as InvoiceState) ?? {}), invNo: number };
+  const { data, error } = await supabase.from('invoices').update({ invoice_no: number, state }).eq('id', id).select('id');
+  if (error) {
+    if (isDuplicateInvoiceNoError(error)) throw await duplicateInvoiceNoError(number, id);
+    throw error;
+  }
+  if (!data || data.length === 0) throw new Error('Could not update the invoice number.');
+}
+
 export async function setInvoiceStatus(id: string, status: 'pending' | 'approved' | 'rejected' | 'draft'): Promise<void> {
+  if (status === 'approved') {
+    const { data: row, error: readError } = await supabase
+      .from('invoices')
+      .select('invoice_no')
+      .eq('id', id)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!row) throw new Error('Invoice not found');
+    await assertInvoiceNumberFree(row.invoice_no, id, { strict: true });
+  }
   const patch: Record<string, unknown> = { status };
   if (status === 'pending') patch.submitted_at = new Date().toISOString();
   if (status === 'approved') {

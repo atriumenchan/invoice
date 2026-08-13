@@ -12,11 +12,13 @@ export function InvoiceNumberField({
   value,
   invoiceId,
   signedIn,
+  strict,
   onChange,
 }: {
   value: string;
   invoiceId: string | null;
   signedIn: boolean;
+  strict?: boolean;
   onChange: (next: string) => void;
 }) {
   const [status, setStatus] = useState<'idle' | 'checking' | 'ok' | 'taken'>('idle');
@@ -34,7 +36,7 @@ export function InvoiceNumberField({
     setStatus('checking');
     const t = setTimeout(async () => {
       try {
-        const result = await checkInvoiceNumberAvailable(number, invoiceId);
+        const result = await checkInvoiceNumberAvailable(number, invoiceId, { strict });
         if (requestId.current !== id) return;
         if (result.available) {
           setStatus('ok');
@@ -48,7 +50,7 @@ export function InvoiceNumberField({
       }
     }, 500);
     return () => clearTimeout(t);
-  }, [value, invoiceId, signedIn]);
+  }, [value, invoiceId, signedIn, strict]);
 
   return (
     <div>

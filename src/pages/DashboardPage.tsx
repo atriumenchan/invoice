@@ -31,6 +31,8 @@ import {
   renameInvoice,
   renameTemplate,
   setInvoiceStatus,
+  assignInvoiceNumber,
+  InvoiceNumberTakenError,
   type InvoiceRow,
   type TemplateRow,
 } from '../lib/db';
@@ -160,8 +162,28 @@ export default function DashboardPage() {
   };
 
   const moderate = async (row: InvoiceRow, status: 'approved' | 'rejected') => {
-    await setInvoiceStatus(row.id, status);
-    load();
+    try {
+      await setInvoiceStatus(row.id, status);
+      load();
+    } catch (e) {
+      if (status === 'approved' && e instanceof InvoiceNumberTakenError) {
+        const next = e.suggestion ?? row.invoice_no;
+        const chosen = window.prompt(
+          `Invoice number "${row.invoice_no}" is already used on another invoice. Change it before approving:`,
+          next
+        );
+        if (!chosen) return;
+        try {
+          await assignInvoiceNumber(row.id, chosen.trim());
+          await setInvoiceStatus(row.id, 'approved');
+          load();
+        } catch (err) {
+          alert((err as Error).message);
+        }
+        return;
+      }
+      alert((e as Error).message);
+    }
   };
 
   const openTemplate = (row: TemplateRow) => {
