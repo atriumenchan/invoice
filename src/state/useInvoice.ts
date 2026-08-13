@@ -239,6 +239,17 @@ export function useInvoice() {
                PDF capture (verified empirically against the icon mark). */
             word.style.transform = 'translateY(-8.5px)';
           }
+          /* html2canvas blend-mode support is patchy — keep the see-through
+             stamp/signature overlay via opacity only in the PDF clone. */
+          cloned.querySelectorAll<HTMLElement>('.stamp, .sig .name, .sig img').forEach((el) => {
+            el.style.mixBlendMode = 'normal';
+          });
+          const stamp = cloned.querySelector<HTMLElement>('.stamp');
+          if (stamp) stamp.style.color = 'rgba(107, 78, 196, 0.42)';
+          const sigName = cloned.querySelector<HTMLElement>('.sig .name');
+          if (sigName) sigName.style.color = 'rgba(18, 22, 40, 0.88)';
+          const sigImg = cloned.querySelector<HTMLElement>('.sig img');
+          if (sigImg) sigImg.style.opacity = '0.88';
         },
       });
       const imgData = canvas.toDataURL('image/png');
