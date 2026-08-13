@@ -209,9 +209,8 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
           <div className="sig-block">
             {s.showStamp && (
               <div className="stamp" aria-hidden="true">
-                <span className="stamp-for">For</span>
-                <span className="stamp-co">Betelgeuse Global</span>
-                <span className="stamp-acc">Accounts</span>
+                <div className="stamp-line1">For Betelgeuse Global</div>
+                <div className="stamp-line2">Accounts</div>
               </div>
             )}
             <div className="sig">
