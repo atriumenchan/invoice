@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { checkInvoiceNumberAvailable, suggestInvoiceNumber } from '../../lib/db';
+import { checkInvoiceNumberAvailable } from '../../lib/db';
 import { Field } from './Field';
 
 /**
- * Invoice numbers are centralized and globally unique (never reused,
- * like an employee ID) — this field checks availability against every
- * user's invoices as you type, and offers the nearest free number if
- * yours is already taken.
+ * Live check against every invoice in the company. Existing invoices
+ * that already have this number are allowed to keep it; new or changed
+ * numbers that collide show the next free one (001 → 002).
  */
 export function InvoiceNumberField({
   value,
@@ -35,18 +34,14 @@ export function InvoiceNumberField({
     setStatus('checking');
     const t = setTimeout(async () => {
       try {
-        const available = await checkInvoiceNumberAvailable(number, invoiceId);
+        const result = await checkInvoiceNumberAvailable(number, invoiceId);
         if (requestId.current !== id) return;
-        if (available) {
+        if (result.available) {
           setStatus('ok');
           setSuggestion(null);
         } else {
           setStatus('taken');
-          try {
-            setSuggestion(await suggestInvoiceNumber(number, invoiceId));
-          } catch {
-            setSuggestion(null);
-          }
+          setSuggestion(result.suggestion);
         }
       } catch {
         if (requestId.current === id) setStatus('idle');
@@ -60,7 +55,7 @@ export function InvoiceNumberField({
       <Field label="Invoice number" value={value} onChange={(e) => onChange(e.target.value)} />
       {status === 'checking' && (
         <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-400">
-          <Loader2 size={11} className="animate-spin" /> Checking availability…
+          <Loader2 size={11} className="animate-spin" /> Checking all invoices…
         </p>
       )}
       {status === 'ok' && (
@@ -68,7 +63,7 @@ export function InvoiceNumberField({
       )}
       {status === 'taken' && (
         <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1.5">
-          <p className="text-[11.5px] font-semibold text-rose-600">Invoice number already used</p>
+          <p className="text-[11.5px] font-semibold text-rose-600">Invoice number already used — please edit it</p>
           {suggestion && (
             <button
               type="button"

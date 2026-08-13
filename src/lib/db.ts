@@ -155,51 +155,76 @@ export async function saveBank(s: InvoiceState): Promise<string> {
   return data.id as string;
 }
 
-/* ---------- invoice numbering (centralized & globally unique) ---------- */
+/* ---------- invoice numbering (centralized across every user) ---------- */
 
-/**
- * Atomically allocates the next free invoice number for a prefix. The
- * server-side function skips over any number that's already used by
- * ANY user (not just the caller), so numbers are a single, centralized
- * sequence — never reused, exactly like an employee ID.
- */
+export class InvoiceNumberTakenError extends Error {
+  suggestion: string | null;
+  constructor(number: string, suggestion: string | null) {
+    super(
+      suggestion
+        ? `Invoice number "${number}" is already used. Next available is "${suggestion}" — edit it, then try again.`
+        : `Invoice number "${number}" is already used. Please choose a different number.`
+    );
+    this.name = 'InvoiceNumberTakenError';
+    this.suggestion = suggestion;
+  }
+}
+
+async function numberingApi(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error('Not signed in');
+  const r = await fetch('/api/invoice-number', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const json = await r.json();
+  if (!r.ok) throw new Error(json.error || `Numbering check failed (${r.status})`);
+  return json;
+}
+
 export async function nextInvoiceNumber(prefix: string): Promise<string> {
-  const { data, error } = await supabase.rpc('next_invoice_number', { p_prefix: prefix });
-  if (error) throw error;
-  return data as string;
+  const json = await numberingApi({ action: 'next', prefix });
+  return json.number as string;
 }
 
-/** True if `number` is free to use (globally, across every user's invoices). */
-export async function checkInvoiceNumberAvailable(number: string, excludeId?: string | null): Promise<boolean> {
-  const { data, error } = await supabase.rpc('check_invoice_number', {
-    p_number: number,
-    p_exclude_id: excludeId ?? null,
-  });
-  if (error) throw error;
-  return data as boolean;
+export async function checkInvoiceNumberAvailable(
+  number: string,
+  excludeId?: string | null
+): Promise<{ available: boolean; suggestion: string | null; grandfathered: boolean }> {
+  const json = await numberingApi({ action: 'check', number, excludeId: excludeId ?? null });
+  return {
+    available: Boolean(json.available),
+    suggestion: (json.suggestion as string | null) ?? null,
+    grandfathered: Boolean(json.grandfathered),
+  };
 }
 
-/** Finds the nearest free number after `number` (same prefix/pattern, numeric suffix + 1, + 2, ...). */
 export async function suggestInvoiceNumber(number: string, excludeId?: string | null): Promise<string> {
-  const { data, error } = await supabase.rpc('suggest_invoice_number', {
-    p_number: number,
-    p_exclude_id: excludeId ?? null,
-  });
-  if (error) throw error;
-  return data as string;
+  const json = await numberingApi({ action: 'suggest', number, excludeId: excludeId ?? null });
+  return json.suggestion as string;
+}
+
+/** Blocks a new/changed number that another invoice already has. Existing saved numbers are allowed to stay. */
+export async function assertInvoiceNumberFree(number: string, excludeId?: string | null): Promise<void> {
+  const trimmed = number.trim();
+  if (!trimmed || trimmed.startsWith('#')) return;
+  const result = await checkInvoiceNumberAvailable(trimmed, excludeId);
+  if (!result.available) throw new InvoiceNumberTakenError(trimmed, result.suggestion);
 }
 
 function isDuplicateInvoiceNoError(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
-  return error.code === '23505' && /invoice_no/i.test(error.message ?? '');
+  return error.code === '23505' || /already used/i.test(error.message ?? '');
 }
 
 async function duplicateInvoiceNoError(invoiceNo: string, excludeId: string | null): Promise<Error> {
   try {
     const suggestion = await suggestInvoiceNumber(invoiceNo, excludeId);
-    return new Error(`Invoice number "${invoiceNo}" is already used. Try "${suggestion}" instead.`);
+    return new InvoiceNumberTakenError(invoiceNo, suggestion);
   } catch {
-    return new Error(`Invoice number "${invoiceNo}" is already used. Please choose a different number.`);
+    return new InvoiceNumberTakenError(invoiceNo, null);
   }
 }
 
@@ -212,12 +237,12 @@ export async function saveInvoiceToCloud(s: InvoiceState, opts?: { title?: strin
 
   let invoice_no: string;
   if (s.invoiceId) {
-    invoice_no = s.invNo;
+    invoice_no = (s.invNo || '').trim();
+    await assertInvoiceNumberFree(invoice_no, s.invoiceId);
   } else {
-    // the untouched default placeholder always starts with '#' — anything
-    // else means the user deliberately typed their own number, so respect it
     const manual = (s.invNo || '').trim();
     invoice_no = !manual || manual.startsWith('#') ? await nextInvoiceNumber(s.invPrefix || 'INV') : manual;
+    await assertInvoiceNumberFree(invoice_no, null);
   }
   const stateToStore = s.invoiceId ? s : { ...s, invNo: invoice_no };
   const row = {

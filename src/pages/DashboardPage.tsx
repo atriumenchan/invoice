@@ -65,6 +65,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | InvoiceStatus>('all');
+  const [approvalUser, setApprovalUser] = useState('all');
 
   const pendingInvoices = useMemo(
     () =>
@@ -72,6 +73,17 @@ export default function DashboardPage() {
         .filter((r) => r.status === 'pending')
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     [invoices]
+  );
+
+  const pendingSenders = useMemo(() => {
+    const emails = [...new Set(pendingInvoices.map((r) => r.created_by_email).filter(Boolean) as string[])];
+    emails.sort();
+    return emails;
+  }, [pendingInvoices]);
+
+  const filteredPending = useMemo(
+    () => (approvalUser === 'all' ? pendingInvoices : pendingInvoices.filter((r) => r.created_by_email === approvalUser)),
+    [pendingInvoices, approvalUser]
   );
 
   const statusCounts = useMemo(() => {
@@ -193,7 +205,7 @@ export default function DashboardPage() {
           STATUS_STYLES[row.status] ?? STATUS_STYLES.draft
         )}
       >
-        {row.status}
+        {row.status === 'pending' ? 'waiting for approval' : row.status}
       </span>
       <span className="shrink-0 text-[13.5px] font-bold tabular-nums text-slate-900">
         {row.currency} {Number(row.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -286,7 +298,7 @@ export default function DashboardPage() {
                 tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               )}
             >
-              {t}
+              {t === 'invoices' ? 'All' : t}
               {t === 'approvals' && pendingInvoices.length > 0 && (
                 <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10.5px] font-bold text-white">
                   {pendingInvoices.length}
@@ -306,15 +318,34 @@ export default function DashboardPage() {
           <UsersPanel />
         ) : tab === 'approvals' && isAdmin ? (
           <div className="space-y-3">
-            <p className="text-[12.5px] font-medium text-slate-500">
-              {pendingInvoices.length === 0
-                ? 'Nothing waiting on you.'
-                : `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'} waiting for approval, oldest first`}
-            </p>
-            {pendingInvoices.length === 0 ? (
-              <EmptyState icon={<Clock size={20} />} title="All caught up" desc="Invoices sent for approval will show up here." />
+            <div className="flex flex-wrap items-center gap-2">
+              <FilterChip
+                label="All"
+                count={pendingInvoices.length}
+                active={approvalUser === 'all'}
+                onClick={() => setApprovalUser('all')}
+              />
+              <select
+                value={approvalUser === 'all' ? '' : approvalUser}
+                onChange={(e) => setApprovalUser(e.target.value || 'all')}
+                className={cn(inputCls, 'h-9 max-w-xs py-0 text-[12.5px]')}
+              >
+                <option value="">Filter by user who sent it</option>
+                {pendingSenders.map((email) => (
+                  <option key={email} value={email}>
+                    {email} ({pendingInvoices.filter((r) => r.created_by_email === email).length})
+                  </option>
+                ))}
+              </select>
+            </div>
+            {filteredPending.length === 0 ? (
+              <EmptyState
+                icon={<Clock size={20} />}
+                title={pendingInvoices.length === 0 ? 'All caught up' : 'No invoices from this user'}
+                desc="Invoices sent for approval will show up here."
+              />
             ) : (
-              <div className="space-y-2.5">{pendingInvoices.map((row) => renderInvoiceCard(row))}</div>
+              <div className="space-y-2.5">{filteredPending.map((row) => renderInvoiceCard(row))}</div>
             )}
           </div>
         ) : tab === 'invoices' ? (
@@ -326,6 +357,15 @@ export default function DashboardPage() {
             />
           ) : (
             <div className="space-y-3">
+              {!isAdmin && (statusCounts.pending ?? 0) > 0 && statusFilter === 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('pending')}
+                  className="w-full rounded-xl border border-blue-100 bg-blue-50 px-4 py-2.5 text-left text-[13px] font-semibold text-blue-700"
+                >
+                  {statusCounts.pending} invoice{statusCounts.pending === 1 ? '' : 's'} waiting for approval — view
+                </button>
+              )}
               <div className="flex flex-wrap gap-1.5">
                 <FilterChip label="All" count={invoices.length} active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
                 {(Object.keys(STATUS_STYLES) as InvoiceStatus[])
@@ -333,7 +373,7 @@ export default function DashboardPage() {
                   .map((s) => (
                     <FilterChip
                       key={s}
-                      label={s}
+                      label={s === 'pending' ? 'waiting for approval' : s}
                       count={statusCounts[s] ?? 0}
                       active={statusFilter === s}
                       onClick={() => setStatusFilter(s)}

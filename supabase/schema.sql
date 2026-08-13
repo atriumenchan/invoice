@@ -298,158 +298,38 @@ create policy "invoices delete" on public.invoices
   for delete using (auth.uid() = user_id or public.is_admin());
 
 -- ================================================================
--- MIGRATION v3 — centralized, globally-unique invoice numbering
--- Run ONLY this section if you already ran the sections above.
---
--- Problem this fixes: invoice numbers were only unique PER USER
--- (unique (user_id, invoice_no)), so two different people could both
--- have "BG-IN-AUG26-0001". This migration makes every invoice number
--- unique across the WHOLE company (like an employee ID — issued once,
--- never reused, from one shared counter), and adds a helper so the
--- app can (a) check availability before save, and (b) suggest the
--- nearest free number when someone types a number that's taken.
+-- MIGRATION v3 — centralized invoice numbers going forward
+-- Existing duplicate numbers are LEFT UNCHANGED.
+-- New numbers (and number *changes*) cannot collide with any invoice.
+-- The live app also enforces this via /api/invoice-number.
 -- ================================================================
 
--- 1) De-duplicate any invoice numbers that collide across different
---    users (possible under the old per-user constraint) before we can
---    enforce a single global-unique constraint. Keeps the oldest
---    invoice untouched; renames newer collisions so nothing is lost —
---    review anything renamed "...-DUPn" afterwards and fix by hand.
-with dupes as (
-  select id, invoice_no,
-         row_number() over (partition by lower(invoice_no) order by created_at) as rn
-  from public.invoices
-)
-update public.invoices i
-set invoice_no = i.invoice_no || '-DUP' || d.rn
-from dupes d
-where i.id = d.id and d.rn > 1;
-
--- 2) Replace the old per-user unique constraint with a global one.
-alter table public.invoices drop constraint if exists invoices_user_id_invoice_no_key;
-alter table public.invoices add constraint invoices_invoice_no_key unique (invoice_no);
-
--- 3) Centralized counter — one row per prefix, shared by every user.
-create table if not exists public.invoice_counters (
-  inv_prefix text primary key,
-  seq bigint not null default 0
-);
-alter table public.invoice_counters enable row level security;
--- no direct policies: only reachable through the security-definer
--- functions below, same pattern as app_config/is_admin()
-
--- 4) Atomically allocate the next free number for a prefix. Skips over
---    any number that's already used by ANYONE, so it self-heals even
---    if manual entries or old per-user data left gaps/collisions.
-create or replace function public.next_invoice_number(p_prefix text)
-returns text
-language plpgsql security definer set search_path = public
+create or replace function public.prevent_new_duplicate_invoice_no()
+returns trigger
+language plpgsql
 as $$
-declare
-  v_uid uuid := auth.uid();
-  v_stamp text := upper(to_char(now(), 'MONYY'));  -- e.g. 'AUG26'
-  v_seq bigint;
-  v_candidate text;
-  v_guard int := 0;
 begin
-  if v_uid is null then
-    raise exception 'not authenticated';
+  -- Updating an invoice that already has this number: leave it alone,
+  -- even if another older invoice shares the same number.
+  if tg_op = 'update' and lower(new.invoice_no) = lower(old.invoice_no) then
+    return new;
   end if;
-  if p_prefix is null or length(trim(p_prefix)) = 0 then
-    p_prefix := 'INV';
-  end if;
-
-  insert into public.invoice_counters (inv_prefix, seq)
-  values (p_prefix, 0)
-  on conflict (inv_prefix) do nothing;
-
-  loop
-    update public.invoice_counters
-      set seq = seq + 1
-      where inv_prefix = p_prefix
-      returning seq into v_seq;
-
-    v_candidate := p_prefix || '-' || v_stamp || '-' || lpad(v_seq::text, 4, '0');
-
-    exit when not exists (
-      select 1 from public.invoices where lower(invoice_no) = lower(v_candidate)
-    );
-
-    v_guard := v_guard + 1;
-    if v_guard > 10000 then
-      raise exception 'Could not allocate a free invoice number for prefix %', p_prefix;
-    end if;
-  end loop;
-
-  return v_candidate;
-end;
-$$;
-
-revoke all on function public.next_invoice_number(text) from public;
-grant execute on function public.next_invoice_number(text) to authenticated;
-
--- 5) Availability check — callable by ANY signed-in user (not just the
---    owner) so the editor can validate a manually-typed number against
---    the whole company's invoices, without exposing whose it is.
-create or replace function public.check_invoice_number(p_number text, p_exclude_id uuid default null)
-returns boolean
-language sql stable security definer set search_path = public
-as $$
-  select not exists (
+  if exists (
     select 1 from public.invoices
-    where lower(invoice_no) = lower(p_number)
-      and (p_exclude_id is null or id <> p_exclude_id)
-  );
-$$;
-
-revoke all on function public.check_invoice_number(text, uuid) from public;
-grant execute on function public.check_invoice_number(text, uuid) to authenticated;
-
--- 6) Suggest the nearest free number after a taken one, preserving its
---    prefix/pattern and incrementing the trailing numeric run
---    ("BG-IN-AUG26-0007" -> "BG-IN-AUG26-0008" -> ... first free one).
-create or replace function public.suggest_invoice_number(p_number text, p_exclude_id uuid default null)
-returns text
-language plpgsql stable security definer set search_path = public
-as $$
-declare
-  v_prefix text;
-  v_num text;
-  v_len int;
-  v_n bigint;
-  v_candidate text;
-  v_guard int := 0;
-begin
-  v_num := substring(p_number from '(\d+)$');
-  if v_num is null then
-    v_prefix := p_number || '-';
-    v_num := '0000';
-  else
-    v_prefix := left(p_number, length(p_number) - length(v_num));
+    where lower(invoice_no) = lower(new.invoice_no)
+      and id is distinct from new.id
+  ) then
+    raise exception 'Invoice number already used: %', new.invoice_no
+      using errcode = '23505';
   end if;
-  v_len := length(v_num);
-  v_n := v_num::bigint;
-
-  loop
-    v_n := v_n + 1;
-    v_candidate := v_prefix || lpad(v_n::text, v_len, '0');
-    exit when not exists (
-      select 1 from public.invoices
-      where lower(invoice_no) = lower(v_candidate)
-        and (p_exclude_id is null or id <> p_exclude_id)
-    );
-    v_guard := v_guard + 1;
-    if v_guard > 10000 then
-      raise exception 'Could not find a free invoice number near %', p_number;
-    end if;
-  end loop;
-
-  return v_candidate;
+  return new;
 end;
 $$;
 
-revoke all on function public.suggest_invoice_number(text, uuid) from public;
-grant execute on function public.suggest_invoice_number(text, uuid) to authenticated;
+drop trigger if exists invoices_no_new_duplicates on public.invoices;
+create trigger invoices_no_new_duplicates
+  before insert or update of invoice_no on public.invoices
+  for each row execute function public.prevent_new_duplicate_invoice_no();
 
 -- ================================================================
 -- Seed: the two ADMEXO issuers (runs for the user who executes it

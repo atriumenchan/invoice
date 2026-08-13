@@ -33,6 +33,8 @@ import {
   saveClient,
   saveInvoiceToCloud,
   saveTemplate,
+  assertInvoiceNumberFree,
+  InvoiceNumberTakenError,
   type BankRow,
   type ClientRow,
   type IssuerRow,
@@ -79,10 +81,20 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     }
   };
 
+  const handleNumberError = (e: unknown) => {
+    if (e instanceof InvoiceNumberTakenError) {
+      if (e.suggestion) update('invNo', e.suggestion);
+      alert(e.message);
+      return true;
+    }
+    return false;
+  };
+
   const submitForApproval = async () => {
     setReviewOpen(false);
     setCloudBusy(true);
     try {
+      await assertInvoiceNumberFree(state.invNo, state.invoiceId);
       const { id, invoice_no } = await saveInvoiceToCloud({ ...state, status: 'pending' });
       update('invoiceId', id);
       update('invNo', invoice_no);
@@ -90,9 +102,18 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       await setInvoiceStatus(id, 'pending');
       flash(`Sent for approval as ${invoice_no}`);
     } catch (e) {
-      alert('Could not submit: ' + (e as Error).message);
+      if (!handleNumberError(e)) alert('Could not submit: ' + (e as Error).message);
     } finally {
       setCloudBusy(false);
+    }
+  };
+
+  const onDownload = async () => {
+    try {
+      await assertInvoiceNumberFree(state.invNo, state.invoiceId);
+      await downloadPDF();
+    } catch (e) {
+      if (!handleNumberError(e)) alert((e as Error).message);
     }
   };
 
@@ -239,7 +260,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       if (nextStatus !== state.status) update('status', nextStatus);
       flash(`Saved as ${invoice_no}`);
     } catch (e) {
-      alert('Could not save invoice: ' + (e as Error).message);
+      if (!handleNumberError(e)) alert('Could not save invoice: ' + (e as Error).message);
     } finally {
       setCloudBusy(false);
     }
@@ -269,7 +290,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
         saveNow();
       } else if (e.key === 'enter') {
         e.preventDefault();
-        downloadPDF();
+        onDownload();
       }
     };
     window.addEventListener('keydown', handler);
@@ -546,7 +567,9 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
                       : 'bg-slate-200 text-slate-500')
               }
             >
-              {state.status}
+              {state.status === 'pending'
+                ? 'waiting for approval'
+                : state.status}
             </span>
           </div>
         )}
@@ -582,18 +605,18 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             >
               <Sparkles size={15} />
             </button>
-            {!isAdmin && state.status !== 'approved' && state.status !== 'pending' && (
-              <button
-                type="button"
-                onClick={() => runReview(true)}
-                disabled={cloudBusy}
-                title="Send for approval"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700 transition-all duration-150 hover:bg-blue-100 active:scale-[0.97] disabled:opacity-60"
-              >
-                <Send size={15} />
-              </button>
-            )}
           </div>
+        )}
+        {session && !isAdmin && state.status !== 'approved' && state.status !== 'pending' && (
+          <button
+            type="button"
+            onClick={() => runReview(true)}
+            disabled={cloudBusy}
+            className="mb-2.5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-[13px] font-bold text-white transition-all duration-150 hover:bg-blue-700 active:scale-[0.99] disabled:opacity-60"
+          >
+            <Send size={15} />
+            {cloudBusy ? 'Sending…' : 'Send for approval'}
+          </button>
         )}
         {cloudMsg && (
           <p className="mb-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-center text-[12px] font-semibold text-emerald-600">
@@ -602,7 +625,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
         )}
         <button
           type="button"
-          onClick={downloadPDF}
+          onClick={onDownload}
           disabled={downloading || !canDownload}
           title={canDownload ? undefined : 'Waiting for admin approval'}
           className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-deep to-brand py-3 text-[14px] font-bold text-white shadow-lg shadow-brand/25 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-brand/30 active:translate-y-0 active:scale-[0.99] disabled:cursor-wait disabled:opacity-60 disabled:hover:translate-y-0"
