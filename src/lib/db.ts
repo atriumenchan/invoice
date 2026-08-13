@@ -246,28 +246,32 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 
 export function invoiceNeedsApproval(row: { status: string; created_by_email: string | null }): boolean {
   if (isAdminEmail(row.created_by_email)) return false;
-  return row.status !== 'approved' && row.status !== 'rejected' && row.status !== 'void';
+  return row.status === 'pending';
 }
-function resolveSaveStatus(s: InvoiceState, saverEmail: string): InvoiceStatus {
-  if (!isAdminEmail(saverEmail)) return 'pending';
+function resolveSaveStatus(s: InvoiceState, saverEmail: string, opts?: { submit?: boolean }): InvoiceStatus {
+  if (!isAdminEmail(saverEmail)) {
+    if (opts?.submit) return 'pending';
+    if (s.status === 'pending') return 'pending';
+    return 'draft';
+  }
   if (!s.invoiceId) return 'approved';
   const owner = (s.createdByEmail || saverEmail).toLowerCase();
   if (isAdminEmail(owner)) return 'approved';
   if (s.status === 'approved' || s.status === 'rejected') return s.status;
-  return 'pending';
+  return s.status === 'pending' ? 'pending' : 'draft';
 }
 
 /* ---------- invoices ---------- */
 export async function saveInvoiceToCloud(
   s: InvoiceState,
-  opts?: { title?: string }
+  opts?: { title?: string; submit?: boolean }
 ): Promise<{ id: string; invoice_no: string; status: InvoiceStatus }> {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error('Not signed in');
   const user_id = auth.user.id;
   const saverEmail = auth.user.email ?? '';
   const t = computeTotals(s);
-  const status = resolveSaveStatus(s, saverEmail);
+  const status = resolveSaveStatus(s, saverEmail, opts);
 
   let invoice_no: string;
   if (s.invoiceId) {

@@ -125,6 +125,10 @@ export function useInvoice() {
     setDirty(true);
   }, []);
 
+  const updateSilent = useCallback(<K extends keyof InvoiceState>(key: K, value: InvoiceState[K]) => {
+    setState((s) => ({ ...s, [key]: value }));
+  }, []);
+
   const replaceState = useCallback((next: InvoiceState) => {
     setState(next);
     setDirty(true);
@@ -256,6 +260,7 @@ export function useInvoice() {
   return {
     state,
     update,
+    updateSilent,
     replaceState,
     applyEntity,
     items: { add: addItem, remove: removeItem, duplicate: duplicateItem, update: updateItem, reorder: reorderItems },

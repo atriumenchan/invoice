@@ -14,6 +14,7 @@ import {
   Plus,
   Receipt,
   Save,
+  Send,
   Settings,
   Sparkles,
   Trash2,
@@ -51,7 +52,7 @@ import { CustomFields } from './CustomFields';
 import { ChargesEditor } from './ChargesEditor';
 
 export function EditorPanel({ inv }: { inv: InvoiceApi }) {
-  const { state, update, applyEntity, items, notes, dirty, savedAt, saveNow, downloading, downloadPDF } = inv;
+  const { state, update, updateSilent, applyEntity, items, notes, dirty, savedAt, saveNow, downloading, downloadPDF } = inv;
   const { total } = computeTotals(state);
   const { session, isAdmin } = useAuth();
   const [issuers, setIssuers] = useState<IssuerRow[]>([]);
@@ -116,7 +117,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     let cancelled = false;
     nextInvoiceNumber(state.invPrefix || 'INV')
       .then((n) => {
-        if (!cancelled) update('invNo', n);
+        if (!cancelled) updateSilent('invNo', n);
       })
       .catch(() => {});
     return () => {
@@ -130,13 +131,13 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     if (!session || !state.invoiceId) return;
     getInvoiceStatus(state.invoiceId)
       .then((live) => {
-        if (live && live !== state.status) update('status', live as InvoiceStatus);
+        if (live && live !== state.status) updateSilent('status', live as InvoiceStatus);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, state.invoiceId]);
 
-  /* real-time cloud auto-save for non-admins once the invoice exists */
+  /* Cloud auto-save: any signed-in user. Team users stay draft until they send for approval. */
   const stateRef = useRef(state);
   stateRef.current = state;
   const baselineRef = useRef('');
@@ -148,22 +149,25 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   }, [state.invoiceId]);
 
   useEffect(() => {
-    if (!session || isAdmin || !state.invoiceId) return;
+    if (!session || !dirty) return;
     if (contentKey(state) === baselineRef.current) return;
     const t = setTimeout(async () => {
       const s = stateRef.current;
       if (contentKey(s) === baselineRef.current) return;
       try {
-        const { status } = await saveInvoiceToCloud(s);
-        baselineRef.current = contentKey(s);
-        if (status !== s.status) update('status', status);
+        const { id, invoice_no, status } = await saveInvoiceToCloud(s);
+        baselineRef.current = contentKey({ ...s, invoiceId: id, invNo: invoice_no, status });
+        if (id !== s.invoiceId) updateSilent('invoiceId', id);
+        if (invoice_no !== s.invNo) updateSilent('invNo', invoice_no);
+        if (status !== s.status) updateSilent('status', status);
+        if (!s.createdByEmail && session.user.email) updateSilent('createdByEmail', session.user.email);
       } catch (e) {
         console.error('Auto-save failed', e);
       }
     }, 1500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, isAdmin, state]);
+  }, [session, dirty, state]);
 
   const flash = (msg: string) => {
     setCloudMsg(msg);
@@ -245,16 +249,37 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   };
 
   const onSaveInvoice = async () => {
+    if (!session) {
+      saveNow();
+      return;
+    }
     setCloudBusy(true);
     try {
       const { id, invoice_no, status } = await saveInvoiceToCloud(state);
-      update('invoiceId', id);
-      update('invNo', invoice_no);
-      update('status', status);
-      if (!state.createdByEmail && session?.user.email) update('createdByEmail', session.user.email);
-      flash(`Saved as ${invoice_no}`);
+      updateSilent('invoiceId', id);
+      updateSilent('invNo', invoice_no);
+      updateSilent('status', status);
+      if (!state.createdByEmail && session.user.email) updateSilent('createdByEmail', session.user.email);
+      saveNow();
     } catch (e) {
-      if (!handleNumberError(e)) alert('Could not save invoice: ' + (e as Error).message);
+      if (!handleNumberError(e)) console.error('Could not save invoice', e);
+    } finally {
+      setCloudBusy(false);
+    }
+  };
+
+  const sendForApproval = async () => {
+    setCloudBusy(true);
+    try {
+      await assertInvoiceNumberFree(state.invNo, state.invoiceId, { strict: true });
+      const { id, invoice_no, status } = await saveInvoiceToCloud(state, { submit: true });
+      updateSilent('invoiceId', id);
+      updateSilent('invNo', invoice_no);
+      updateSilent('status', status);
+      if (!state.createdByEmail && session?.user.email) updateSilent('createdByEmail', session.user.email);
+      flash(`Sent for approval as ${invoice_no}`);
+    } catch (e) {
+      if (!handleNumberError(e)) alert('Could not send for approval: ' + (e as Error).message);
     } finally {
       setCloudBusy(false);
     }
@@ -281,7 +306,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       const key = e.key.toLowerCase();
       if (key === 's') {
         e.preventDefault();
-        saveNow();
+        void onSaveInvoice();
       } else if (e.key === 'enter') {
         e.preventDefault();
         onDownload();
@@ -566,7 +591,9 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
                 ? 'approved'
                 : state.status === 'rejected'
                   ? 'rejected'
-                  : 'waiting for approval'}
+                  : state.status === 'pending'
+                    ? 'waiting for approval'
+                    : 'draft'}
             </span>
           </div>
         )}
@@ -574,22 +601,13 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           <div className="mb-2.5 flex items-center gap-1.5">
             <button
               type="button"
-              onClick={onSaveInvoice}
-              disabled={cloudBusy}
-              title={state.invoiceId ? `Update ${state.invNo}` : 'Save invoice'}
-              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#E8ECF4] bg-white text-[12px] font-semibold text-slate-600 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.97] disabled:opacity-60"
-            >
-              <Save size={14} />
-              <span className="truncate">{cloudBusy ? 'Saving…' : state.invoiceId ? 'Update' : 'Save'}</span>
-            </button>
-            <button
-              type="button"
               onClick={onSaveTemplate}
               disabled={cloudBusy}
               title="Save as template"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#E8ECF4] bg-white text-slate-500 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.97] disabled:opacity-60"
+              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#E8ECF4] bg-white text-[12px] font-semibold text-slate-600 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.97] disabled:opacity-60"
             >
-              <LayoutTemplate size={15} />
+              <LayoutTemplate size={14} />
+              <span className="truncate">Save as template</span>
             </button>
             <button
               type="button"
@@ -601,6 +619,17 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               <Sparkles size={15} />
             </button>
           </div>
+        )}
+        {session && !isAdmin && state.status !== 'approved' && state.status !== 'pending' && (
+          <button
+            type="button"
+            onClick={sendForApproval}
+            disabled={cloudBusy}
+            className="mb-2.5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-[13px] font-bold text-white transition-all duration-150 hover:bg-blue-700 active:scale-[0.99] disabled:opacity-60"
+          >
+            <Send size={15} />
+            {cloudBusy ? 'Sending…' : 'Send for approval'}
+          </button>
         )}
         {cloudMsg && (
           <p className="mb-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-center text-[12px] font-semibold text-emerald-600">
