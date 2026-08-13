@@ -32,6 +32,7 @@ import {
   saveClient,
   saveInvoiceToCloud,
   saveTemplate,
+  nextInvoiceNumber,
   assertInvoiceNumberFree,
   InvoiceNumberTakenError,
   type BankRow,
@@ -108,6 +109,21 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       }
     })();
   }, [session]);
+
+  /* New invoices get the next free company-wide number (BG-IN-0004 if 0003 exists). */
+  useEffect(() => {
+    if (!session || state.invoiceId) return;
+    let cancelled = false;
+    nextInvoiceNumber(state.invPrefix || 'INV')
+      .then((n) => {
+        if (!cancelled) update('invNo', n);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, state.invoiceId, state.invPrefix]);
 
   /* pull the live status so admin approvals show up for the creator */
   useEffect(() => {

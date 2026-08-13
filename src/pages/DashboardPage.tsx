@@ -25,6 +25,7 @@ import {
   deleteInvoice,
   deleteTemplate,
   invoiceNeedsApproval,
+  isAdminEmail,
   listInvoices,
   listTemplates,
   renameInvoice,
@@ -55,7 +56,7 @@ interface ManagedUser {
   last_sign_in_at: string | null;
 }
 
-type Tab = 'invoices' | 'approvals' | 'templates' | 'users';
+type Tab = 'invoices' | 'approvals' | 'mine' | 'templates' | 'users';
 
 export default function DashboardPage() {
   const { session, isAdmin, signOut } = useAuth();
@@ -81,6 +82,11 @@ export default function DashboardPage() {
     emails.sort();
     return emails;
   }, [pendingInvoices]);
+
+  const adminInvoices = useMemo(
+    () => invoices.filter((r) => isAdminEmail(r.created_by_email)),
+    [invoices]
+  );
 
   const filteredPending = useMemo(
     () => (approvalUser === 'all' ? pendingInvoices : pendingInvoices.filter((r) => r.created_by_email === approvalUser)),
@@ -291,7 +297,7 @@ export default function DashboardPage() {
           {(
             [
               'invoices',
-              ...(isAdmin ? (['approvals'] as const) : []),
+              ...(isAdmin ? (['approvals', 'mine'] as const) : []),
               'templates',
               ...(isAdmin ? (['users'] as const) : []),
             ] as const
@@ -305,7 +311,7 @@ export default function DashboardPage() {
                 tab === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               )}
             >
-              {t === 'invoices' ? 'All' : t}
+              {t === 'invoices' ? 'All' : t === 'mine' ? 'Admin invoices' : t}
               {t === 'approvals' && pendingInvoices.length > 0 && (
                 <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10.5px] font-bold text-white">
                   {pendingInvoices.length}
@@ -355,6 +361,16 @@ export default function DashboardPage() {
               <div className="space-y-2.5">{filteredPending.map((row) => renderInvoiceCard(row))}</div>
             )}
           </div>
+        ) : tab === 'mine' && isAdmin ? (
+          adminInvoices.length === 0 ? (
+            <EmptyState
+              icon={<FileText size={20} />}
+              title="No admin invoices yet"
+              desc="Invoices you save as super admin appear here — they do not need approval."
+            />
+          ) : (
+            <div className="space-y-2.5">{adminInvoices.map((row) => renderInvoiceCard(row))}</div>
+          )
         ) : tab === 'invoices' ? (
           invoices.length === 0 ? (
             <EmptyState

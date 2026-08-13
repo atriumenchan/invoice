@@ -261,7 +261,7 @@ export async function saveInvoiceToCloud(
 
   let invoice_no: string;
   if (s.invoiceId) {
-    invoice_no = (s.invNo || '').trim();
+    invoice_no = (s.invNo || '').trim().replace(/^#+/, '');
     await assertInvoiceNumberFree(invoice_no, s.invoiceId);
   } else {
     const manual = (s.invNo || '').trim();
