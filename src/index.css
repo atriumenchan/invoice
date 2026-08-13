@@ -427,7 +427,7 @@ body {
   isolation: isolate;
   min-width: 340px;
   max-width: 440px;
-  padding: 0 0 2px;
+  padding: 0;
   border-bottom: 1px dashed #c5c9d2;
 }
 #invoice .sign-card .stamp {
@@ -460,22 +460,23 @@ body {
   z-index: 1;
   display: flex;
   justify-content: center;
-  align-items: center;
-  min-height: 52px;
-  padding: 10px 8px 4px;
+  align-items: flex-end;
+  min-height: 36px;
+  padding: 10px 4px 0;
 }
 #invoice .sign-card .sig img {
-  max-height: 56px;
-  max-width: 220px;
+  max-width: 240px;
   mix-blend-mode: multiply;
+  display: block;
 }
 #invoice .sign-card .name {
   font-family: 'Great Vibes', cursive;
-  font-size: 30px;
+  font-size: 38px;
   color: rgba(18, 22, 40, 0.92);
-  line-height: 1.05;
+  line-height: 0.68;
   white-space: nowrap;
   mix-blend-mode: multiply;
+  transform: translateY(5px);
 }
 #invoice .sign-card .title {
   font-size: 10.5px;

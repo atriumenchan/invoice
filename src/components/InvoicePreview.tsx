@@ -214,6 +214,7 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
                 style={{
                   opacity: Math.max(0, Math.min(100, s.stampOpacity ?? 46)) / 100,
                   transform: `rotate(${s.stampRotate ?? 0}deg)`,
+                  fontSize: `${s.stampFontSize ?? 30}px`,
                 }}
               >
                 <div className="stamp-line1">For Betelgeuse Global</div>
@@ -222,9 +223,15 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
             )}
             <div className="sig">
               {useSignImage ? (
-                <img src={s.signImage!} alt="signature" />
+                <img
+                  src={s.signImage!}
+                  alt="signature"
+                  style={{ maxHeight: Math.round((s.signFontSize ?? 38) * 1.55) }}
+                />
               ) : (
-                <div className="name" style={{ fontFamily: s.signFont }}>{s.signName}</div>
+                <div className="name" style={{ fontFamily: s.signFont, fontSize: `${s.signFontSize ?? 38}px` }}>
+                  {s.signName}
+                </div>
               )}
             </div>
           </div>

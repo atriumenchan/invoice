@@ -21,6 +21,7 @@ import {
   User,
   Droplets,
   RotateCw,
+  Type,
 } from 'lucide-react';
 import type { EntityRegion, InvoiceState, InvoiceStatus } from '../../types';
 import type { InvoiceApi } from '../../state/useInvoice';
@@ -52,6 +53,7 @@ import { SignatureSection } from './SignatureSection';
 import { InvoiceNumberField } from './InvoiceNumberField';
 import { CustomFields } from './CustomFields';
 import { ChargesEditor } from './ChargesEditor';
+import { fetchSignStyleCloud, saveSignStyleCloud, writeStampLast } from '../../lib/stampPrefs';
 
 export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   const { state, update, updateSilent, applyEntity, items, notes, dirty, savedAt, saveNow, downloading, downloadPDF } = inv;
@@ -66,6 +68,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [review, setReview] = useState<ReviewResult | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const styleCloudReady = useRef(false);
 
   const canDownload = isAdmin || state.status === 'approved';
   const runReview = async () => {
@@ -112,6 +115,41 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       }
     })();
   }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    fetchSignStyleCloud()
+      .then((prefs) => {
+        if (cancelled || !prefs) return;
+        updateSilent('stampOpacity', prefs.stampOpacity);
+        updateSilent('stampRotate', prefs.stampRotate);
+        updateSilent('stampFontSize', prefs.stampFontSize);
+        updateSilent('signFontSize', prefs.signFontSize);
+        writeStampLast(prefs);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) styleCloudReady.current = true;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session, updateSilent]);
+
+  useEffect(() => {
+    if (!session || !styleCloudReady.current) return;
+    const prefs = {
+      stampOpacity: state.stampOpacity,
+      stampRotate: state.stampRotate,
+      stampFontSize: state.stampFontSize,
+      signFontSize: state.signFontSize,
+    };
+    const t = setTimeout(() => {
+      saveSignStyleCloud(prefs).catch(() => {});
+    }, 600);
+    return () => clearTimeout(t);
+  }, [session, state.stampOpacity, state.stampRotate, state.stampFontSize, state.signFontSize]);
 
   /* New invoices get the next free company-wide number (BG-IN-0004 if 0003 exists). */
   useEffect(() => {
@@ -551,6 +589,20 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           <SectionCard value="signature" icon={PenTool} title="Signature" description="Type with a font or upload an image" accent="violet" complete={Boolean(state.signName || state.signImage)}>
             <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
               <Switch label="Show signature on invoice" checked={state.showSignature} onChange={(v) => update('showSignature', v)} />
+              {state.showSignature && (
+                <div className="flex items-center justify-end gap-2.5 px-1 pb-0.5">
+                  <MiniStepper
+                    label="Signature size"
+                    icon={<Type size={10} strokeWidth={2.2} />}
+                    value={state.signFontSize}
+                    suffix=""
+                    step={2}
+                    min={18}
+                    max={72}
+                    onChange={(n) => update('signFontSize', n)}
+                  />
+                </div>
+              )}
               <Switch label="Stamp" checked={state.showStamp} onChange={(v) => update('showStamp', v)} />
               {state.showStamp && (
                 <div className="flex items-center justify-end gap-2.5 px-1 pb-0.5">
@@ -573,6 +625,16 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
                     min={-45}
                     max={45}
                     onChange={(n) => update('stampRotate', n)}
+                  />
+                  <MiniStepper
+                    label="Stamp size"
+                    icon={<Type size={10} strokeWidth={2.2} />}
+                    value={state.stampFontSize}
+                    suffix=""
+                    step={2}
+                    min={16}
+                    max={56}
+                    onChange={(n) => update('stampFontSize', n)}
                   />
                 </div>
               )}

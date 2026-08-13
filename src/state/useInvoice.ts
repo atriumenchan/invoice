@@ -45,6 +45,8 @@ const DEFAULT_STATE: InvoiceState = {
   showStamp: true,
   stampOpacity: 46,
   stampRotate: 0,
+  stampFontSize: 30,
+  signFontSize: 38,
   showFooter: true,
 
   showGstin: true,
@@ -114,11 +116,16 @@ function loadInitial(): InvoiceState {
   return hydrateInvoiceState(null);
 }
 
-/** Fill missing fields from defaults + last-used stamp opacity/angle. */
+/** Fill missing fields from defaults + last-used stamp/signature style. */
 export function hydrateInvoiceState(partial?: Partial<InvoiceState> | null): InvoiceState {
   const last = readStampLast();
   const next: InvoiceState = { ...DEFAULT_STATE, ...last, ...(partial ?? {}) };
-  writeStampLast({ stampOpacity: next.stampOpacity, stampRotate: next.stampRotate });
+  writeStampLast({
+    stampOpacity: next.stampOpacity,
+    stampRotate: next.stampRotate,
+    stampFontSize: next.stampFontSize,
+    signFontSize: next.signFontSize,
+  });
   return next;
 }
 
@@ -132,8 +139,18 @@ export function useInvoice() {
   const update = useCallback(<K extends keyof InvoiceState>(key: K, value: InvoiceState[K]) => {
     setState((s) => {
       const next = { ...s, [key]: value };
-      if (key === 'stampOpacity' || key === 'stampRotate') {
-        writeStampLast({ stampOpacity: next.stampOpacity, stampRotate: next.stampRotate });
+      if (
+        key === 'stampOpacity' ||
+        key === 'stampRotate' ||
+        key === 'stampFontSize' ||
+        key === 'signFontSize'
+      ) {
+        writeStampLast({
+          stampOpacity: next.stampOpacity,
+          stampRotate: next.stampRotate,
+          stampFontSize: next.stampFontSize,
+          signFontSize: next.signFontSize,
+        });
       }
       return next;
     });

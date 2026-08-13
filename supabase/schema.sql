@@ -271,6 +271,9 @@ insert into public.app_config (key, value)
 values ('admin_email', 'ryan@admexo.com')
 on conflict (key) do update set value = excluded.value;
 
+-- Shared stamp/signature style (opacity, rotation, font sizes) is upserted
+-- by /api/sign-prefs using the service role; no extra SQL required.
+
 create or replace function public.is_admin()
 returns boolean
 language sql stable security definer set search_path = public
