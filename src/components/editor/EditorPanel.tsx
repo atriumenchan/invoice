@@ -14,7 +14,6 @@ import {
   Plus,
   Receipt,
   Save,
-  Send,
   Settings,
   Sparkles,
   Trash2,
@@ -43,7 +42,7 @@ import { SectionCard } from './SectionCard';
 import { EyeChip, Field, Select, Switch, TextArea } from './Field';
 import { ReviewModal } from '../ReviewModal';
 import { reviewInvoice, type ReviewResult } from '../../lib/ai';
-import { getInvoiceStatus, setInvoiceStatus } from '../../lib/db';
+import { getInvoiceStatus } from '../../lib/db';
 import { LineItemsSection } from './LineItemsSection';
 import { SignatureSection } from './SignatureSection';
 import { InvoiceNumberField } from './InvoiceNumberField';
@@ -63,11 +62,9 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [review, setReview] = useState<ReviewResult | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
-  const [reviewThenSubmit, setReviewThenSubmit] = useState(false);
 
   const canDownload = isAdmin || state.status === 'approved';
-  const runReview = async (thenSubmit: boolean) => {
-    setReviewThenSubmit(thenSubmit);
+  const runReview = async () => {
     setReviewOpen(true);
     setReviewLoading(true);
     setReview(null);
@@ -88,24 +85,6 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       return true;
     }
     return false;
-  };
-
-  const submitForApproval = async () => {
-    setReviewOpen(false);
-    setCloudBusy(true);
-    try {
-      await assertInvoiceNumberFree(state.invNo, state.invoiceId);
-      const { id, invoice_no } = await saveInvoiceToCloud({ ...state, status: 'pending' });
-      update('invoiceId', id);
-      update('invNo', invoice_no);
-      update('status', 'pending');
-      await setInvoiceStatus(id, 'pending');
-      flash(`Sent for approval as ${invoice_no}`);
-    } catch (e) {
-      if (!handleNumberError(e)) alert('Could not submit: ' + (e as Error).message);
-    } finally {
-      setCloudBusy(false);
-    }
   };
 
   const onDownload = async () => {
@@ -158,9 +137,8 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     const t = setTimeout(async () => {
       const s = stateRef.current;
       if (contentKey(s) === baselineRef.current) return;
-      const status = s.status === 'approved' ? 'pending' : s.status;
       try {
-        await saveInvoiceToCloud({ ...s, status });
+        const { status } = await saveInvoiceToCloud(s);
         baselineRef.current = contentKey(s);
         if (status !== s.status) update('status', status);
       } catch (e) {
@@ -253,11 +231,11 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   const onSaveInvoice = async () => {
     setCloudBusy(true);
     try {
-      const nextStatus = !isAdmin && state.status === 'approved' ? 'draft' : state.status;
-      const { id, invoice_no } = await saveInvoiceToCloud({ ...state, status: nextStatus });
+      const { id, invoice_no, status } = await saveInvoiceToCloud(state);
       update('invoiceId', id);
       update('invNo', invoice_no);
-      if (nextStatus !== state.status) update('status', nextStatus);
+      update('status', status);
+      if (!state.createdByEmail && session?.user.email) update('createdByEmail', session.user.email);
       flash(`Saved as ${invoice_no}`);
     } catch (e) {
       if (!handleNumberError(e)) alert('Could not save invoice: ' + (e as Error).message);
@@ -567,26 +545,26 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
                       : 'bg-slate-200 text-slate-500')
               }
             >
-              {state.status === 'pending'
-                ? 'waiting for approval'
-                : state.status}
+              {state.status === 'approved'
+                ? 'approved'
+                : state.status === 'rejected'
+                  ? 'rejected'
+                  : 'waiting for approval'}
             </span>
           </div>
         )}
         {session && (
           <div className="mb-2.5 flex items-center gap-1.5">
-            {(isAdmin || !state.invoiceId) && (
-              <button
-                type="button"
-                onClick={onSaveInvoice}
-                disabled={cloudBusy}
-                title={state.invoiceId ? `Update ${state.invNo}` : 'Save invoice'}
-                className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#E8ECF4] bg-white text-[12px] font-semibold text-slate-600 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.97] disabled:opacity-60"
-              >
-                <Save size={14} />
-                <span className="truncate">{cloudBusy ? 'Saving…' : state.invoiceId ? 'Update' : 'Save'}</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={onSaveInvoice}
+              disabled={cloudBusy}
+              title={state.invoiceId ? `Update ${state.invNo}` : 'Save invoice'}
+              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#E8ECF4] bg-white text-[12px] font-semibold text-slate-600 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.97] disabled:opacity-60"
+            >
+              <Save size={14} />
+              <span className="truncate">{cloudBusy ? 'Saving…' : state.invoiceId ? 'Update' : 'Save'}</span>
+            </button>
             <button
               type="button"
               onClick={onSaveTemplate}
@@ -598,7 +576,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             </button>
             <button
               type="button"
-              onClick={() => runReview(false)}
+              onClick={() => runReview()}
               disabled={cloudBusy}
               title="AI Review"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-brand/25 bg-brand/5 text-brand-deep transition-all duration-150 hover:bg-brand/10 active:scale-[0.97] disabled:opacity-60"
@@ -606,17 +584,6 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               <Sparkles size={15} />
             </button>
           </div>
-        )}
-        {session && !isAdmin && state.status !== 'approved' && state.status !== 'pending' && (
-          <button
-            type="button"
-            onClick={() => runReview(true)}
-            disabled={cloudBusy}
-            className="mb-2.5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-[13px] font-bold text-white transition-all duration-150 hover:bg-blue-700 active:scale-[0.99] disabled:opacity-60"
-          >
-            <Send size={15} />
-            {cloudBusy ? 'Sending…' : 'Send for approval'}
-          </button>
         )}
         {cloudMsg && (
           <p className="mb-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-center text-[12px] font-semibold text-emerald-600">
@@ -644,8 +611,6 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
         review={review}
         error={reviewError}
         onClose={() => setReviewOpen(false)}
-        onProceed={reviewThenSubmit ? submitForApproval : undefined}
-        proceedLabel="Send for approval"
       />
     </div>
   );

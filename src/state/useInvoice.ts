@@ -27,6 +27,7 @@ const DEFAULT_STATE: InvoiceState = {
   bankId: null,
   invPrefix: 'BG-IN',
   status: 'draft',
+  createdByEmail: null,
   entity: 'IN',
   docTitle: 'TAX INVOICE',
   invNo: `#BG-IN-${monthStamp()}-0001`,

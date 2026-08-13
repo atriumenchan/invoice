@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { computeTotals } from './calc';
-import type { CustomField, EntityRegion, InvoiceState } from '../types';
+import type { CustomField, EntityRegion, InvoiceState, InvoiceStatus } from '../types';
 
 export interface IssuerRow {
   id: string;
@@ -228,12 +228,36 @@ async function duplicateInvoiceNoError(invoiceNo: string, excludeId: string | nu
   }
 }
 
+const ADMIN_EMAIL = ((import.meta.env.VITE_ADMIN_EMAIL as string) || 'ryan@admexo.com').toLowerCase();
+
+export function isAdminEmail(email: string | null | undefined): boolean {
+  return (email || '').toLowerCase() === ADMIN_EMAIL;
+}
+
+export function invoiceNeedsApproval(row: { status: string; created_by_email: string | null }): boolean {
+  if (isAdminEmail(row.created_by_email)) return false;
+  return row.status !== 'approved' && row.status !== 'rejected' && row.status !== 'void';
+}
+function resolveSaveStatus(s: InvoiceState, saverEmail: string): InvoiceStatus {
+  if (!isAdminEmail(saverEmail)) return 'pending';
+  if (!s.invoiceId) return 'approved';
+  const owner = (s.createdByEmail || saverEmail).toLowerCase();
+  if (isAdminEmail(owner)) return 'approved';
+  if (s.status === 'approved' || s.status === 'rejected') return s.status;
+  return 'pending';
+}
+
 /* ---------- invoices ---------- */
-export async function saveInvoiceToCloud(s: InvoiceState, opts?: { title?: string }): Promise<{ id: string; invoice_no: string }> {
+export async function saveInvoiceToCloud(
+  s: InvoiceState,
+  opts?: { title?: string }
+): Promise<{ id: string; invoice_no: string; status: InvoiceStatus }> {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error('Not signed in');
   const user_id = auth.user.id;
+  const saverEmail = auth.user.email ?? '';
   const t = computeTotals(s);
+  const status = resolveSaveStatus(s, saverEmail);
 
   let invoice_no: string;
   if (s.invoiceId) {
@@ -244,13 +268,18 @@ export async function saveInvoiceToCloud(s: InvoiceState, opts?: { title?: strin
     invoice_no = !manual || manual.startsWith('#') ? await nextInvoiceNumber(s.invPrefix || 'INV') : manual;
     await assertInvoiceNumberFree(invoice_no, null);
   }
-  const stateToStore = s.invoiceId ? s : { ...s, invNo: invoice_no };
+  const stateToStore = {
+    ...s,
+    invNo: invoice_no,
+    status,
+    createdByEmail: s.invoiceId ? s.createdByEmail : saverEmail || null,
+  };
   const row = {
     invoice_no,
     title: opts?.title ?? s.toName ?? '',
     issuer_id: s.issuerId,
     client_id: s.clientId,
-    status: s.status,
+    status,
     currency: s.currency,
     subtotal: t.subtotal,
     discount: t.discount,
@@ -259,8 +288,6 @@ export async function saveInvoiceToCloud(s: InvoiceState, opts?: { title?: strin
     state: stateToStore,
   };
   if (s.invoiceId) {
-    // never touch user_id / created_by_email on update — an admin editing
-    // someone else's invoice must not take ownership of it
     const { data, error } = await supabase.from('invoices').update(row).eq('id', s.invoiceId).select('id');
     if (error) {
       if (isDuplicateInvoiceNoError(error)) throw await duplicateInvoiceNoError(invoice_no, s.invoiceId);
@@ -271,18 +298,18 @@ export async function saveInvoiceToCloud(s: InvoiceState, opts?: { title?: strin
         'This invoice could not be updated — it may belong to a different account or have been deleted. Please start a new invoice.'
       );
     }
-    return { id: s.invoiceId, invoice_no };
+    return { id: s.invoiceId, invoice_no, status };
   }
   const { data, error } = await supabase
     .from('invoices')
-    .insert({ ...row, user_id, created_by_email: auth.user.email ?? null })
+    .insert({ ...row, user_id, created_by_email: saverEmail || null })
     .select('id')
     .single();
   if (error) {
     if (isDuplicateInvoiceNoError(error)) throw await duplicateInvoiceNoError(invoice_no, null);
     throw error;
   }
-  return { id: data.id as string, invoice_no };
+  return { id: data.id as string, invoice_no, status };
 }
 
 export async function listInvoices(): Promise<InvoiceRow[]> {
@@ -335,18 +362,18 @@ export async function cloneTemplateAsInvoice(t: TemplateRow, existingTitles: str
     n += 1;
     title = `${base} copy ${n}`;
   }
-  const state: InvoiceState = { ...t.state, invoiceId: null, status: 'draft' };
-  const { id, invoice_no } = await saveInvoiceToCloud(state, { title });
+  const state: InvoiceState = { ...t.state, invoiceId: null };
+  const { id, invoice_no, status } = await saveInvoiceToCloud(state, { title });
   return {
     id,
     invoice_no,
     title,
-    status: 'draft',
+    status,
     currency: state.currency,
     total: computeTotals(state).total,
     created_by_email: null,
     created_at: new Date().toISOString(),
-    state: { ...state, invNo: invoice_no },
+    state: { ...state, invNo: invoice_no, status, invoiceId: id },
   };
 }
 

@@ -33,6 +33,7 @@ export interface InvoiceState {
   bankId: string | null;
   invPrefix: string;
   status: InvoiceStatus;
+  createdByEmail: string | null;
   entity: EntityRegion;
   docTitle: string;
   invNo: string;

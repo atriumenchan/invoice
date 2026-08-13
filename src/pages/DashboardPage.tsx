@@ -24,6 +24,7 @@ import {
   cloneTemplateAsInvoice,
   deleteInvoice,
   deleteTemplate,
+  invoiceNeedsApproval,
   listInvoices,
   listTemplates,
   renameInvoice,
@@ -70,7 +71,7 @@ export default function DashboardPage() {
   const pendingInvoices = useMemo(
     () =>
       invoices
-        .filter((r) => r.status === 'pending')
+        .filter((r) => invoiceNeedsApproval(r))
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     [invoices]
   );
@@ -117,7 +118,13 @@ export default function DashboardPage() {
   const openInvoice = (row: InvoiceRow) => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ ...row.state, invoiceId: row.id, invNo: row.invoice_no, status: row.status as InvoiceStatus })
+      JSON.stringify({
+        ...row.state,
+        invoiceId: row.id,
+        invNo: row.invoice_no,
+        status: row.status as InvoiceStatus,
+        createdByEmail: row.created_by_email,
+      })
     );
     navigate('/');
   };
@@ -205,12 +212,12 @@ export default function DashboardPage() {
           STATUS_STYLES[row.status] ?? STATUS_STYLES.draft
         )}
       >
-        {row.status === 'pending' ? 'waiting for approval' : row.status}
+        {invoiceNeedsApproval(row) ? 'waiting for approval' : row.status}
       </span>
       <span className="shrink-0 text-[13.5px] font-bold tabular-nums text-slate-900">
         {row.currency} {Number(row.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}
       </span>
-      {isAdmin && row.status === 'pending' && (
+      {isAdmin && invoiceNeedsApproval(row) && (
         <>
           <button
             type="button"
@@ -357,13 +364,13 @@ export default function DashboardPage() {
             />
           ) : (
             <div className="space-y-3">
-              {!isAdmin && (statusCounts.pending ?? 0) > 0 && statusFilter === 'all' && (
+              {!isAdmin && pendingInvoices.length > 0 && statusFilter === 'all' && (
                 <button
                   type="button"
                   onClick={() => setStatusFilter('pending')}
                   className="w-full rounded-xl border border-blue-100 bg-blue-50 px-4 py-2.5 text-left text-[13px] font-semibold text-blue-700"
                 >
-                  {statusCounts.pending} invoice{statusCounts.pending === 1 ? '' : 's'} waiting for approval — view
+                  {pendingInvoices.length} invoice{pendingInvoices.length === 1 ? '' : 's'} waiting for approval — view
                 </button>
               )}
               <div className="flex flex-wrap gap-1.5">
