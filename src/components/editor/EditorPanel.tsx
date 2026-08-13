@@ -551,7 +551,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           <SectionCard value="signature" icon={PenTool} title="Signature" description="Type with a font or upload an image" accent="violet" complete={Boolean(state.signName || state.signImage)}>
             <div className="rounded-xl border border-[#E8ECF4] bg-slate-50/50 px-2.5 py-1.5">
               <Switch label="Show signature on invoice" checked={state.showSignature} onChange={(v) => update('showSignature', v)} />
-              <Switch label="Show For Betelgeuse Global Accounts stamp" checked={state.showStamp} onChange={(v) => update('showStamp', v)} />
+              <Switch label="Stamp" checked={state.showStamp} onChange={(v) => update('showStamp', v)} />
               {state.showStamp && (
                 <div className="flex items-center justify-end gap-2.5 px-1 pb-0.5">
                   <MiniStepper
