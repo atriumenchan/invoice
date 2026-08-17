@@ -326,7 +326,13 @@ export async function saveInvoiceToCloud(
   const user_id = auth.user.id;
   const saverEmail = auth.user.email ?? '';
   const t = computeTotals(s);
-  const status = resolveSaveStatus(s, saverEmail, opts);
+  let status = resolveSaveStatus(s, saverEmail, opts);
+  if (s.invoiceId && !isAdminEmail(saverEmail) && !opts?.submit) {
+    const live = await getInvoiceStatus(s.invoiceId);
+    if (live === 'approved' || live === 'pending' || live === 'rejected' || live === 'void') {
+      status = live;
+    }
+  }
 
   let invoice_no: string;
   if (s.invoiceId) {

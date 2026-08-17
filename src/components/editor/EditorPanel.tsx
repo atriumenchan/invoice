@@ -128,6 +128,10 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   };
 
   const onDownload = async () => {
+    if (!canDownload) {
+      alert('Download is available after this invoice is approved.');
+      return;
+    }
     try {
       await downloadPDF();
     } catch (e) {
@@ -844,7 +848,9 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             className="icon-action bg-gradient-to-r from-brand-deep to-brand text-white shadow-sm shadow-brand/20 hover:text-white"
           >
             <Download size={15} />
-            <span className="icon-tip">{downloading ? 'Generating…' : 'Download PDF'}</span>
+            <span className="icon-tip">
+              {downloading ? 'Generating…' : canDownload ? 'Download PDF' : 'Available after approval'}
+            </span>
           </button>
         </div>
         {cloudMsg && (

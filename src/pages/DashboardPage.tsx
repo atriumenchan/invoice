@@ -41,7 +41,7 @@ import {
 import { cn } from '../lib/utils';
 import type { InvoiceStatus } from '../types';
 import { inputCls } from '../components/editor/Field';
-import { canDeleteInvoice, canEditInvoiceContent } from '../lib/permissions';
+import { canDeleteInvoice, canDownloadPdf, canEditInvoiceContent } from '../lib/permissions';
 
 const STATUS_STYLES: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-600',
@@ -299,9 +299,15 @@ export default function DashboardPage() {
       <button type="button" title="Open" onClick={() => openInvoice(row)} className="icon-btn">
         <FileText size={14} />
       </button>
-      <button type="button" title="Download PDF" onClick={() => openInvoice(row)} className="icon-btn">
-        <Download size={14} />
-      </button>
+      {canDownloadPdf(access) ? (
+        <button type="button" title="Download PDF" onClick={() => openInvoice(row)} className="icon-btn">
+          <Download size={14} />
+        </button>
+      ) : (
+        <button type="button" title="Download available after approval" disabled className="icon-btn cursor-not-allowed opacity-35">
+          <Download size={14} />
+        </button>
+      )}
       <button type="button" title="Email invoice" onClick={() => emailInvoice(row)} className="icon-btn">
         <Mail size={14} />
       </button>
