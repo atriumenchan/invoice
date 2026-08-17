@@ -1,0 +1,8 @@
+---
+description: Always commit and push app changes to origin main so Vercel deploys them
+alwaysApply: true
+---
+
+# Deploy after every change
+
+After finishing invoice-builder-react UI or logic changes, commit them and `git push origin main` in the same turn. Production only updates when main is pushed. Do not leave deployable work unpushed.

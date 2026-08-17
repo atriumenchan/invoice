@@ -270,6 +270,16 @@ export function invoiceCanBeModerated(row: { status: string; created_by_email: s
   if (isAdminEmail(row.created_by_email)) return false;
   return row.status === 'pending';
 }
+
+/** Admin does not see other people's drafts until they send for approval. */
+export function invoiceListedForAdmin(
+  row: { status: string; created_by_email: string | null },
+  isAdmin: boolean
+): boolean {
+  if (!isAdmin) return true;
+  if (isAdminEmail(row.created_by_email)) return true;
+  return row.status !== 'draft';
+}
 export type SaveInvoiceOpts = {
   title?: string;
   submit?: boolean;

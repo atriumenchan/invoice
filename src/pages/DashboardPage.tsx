@@ -25,6 +25,7 @@ import {
   deleteInvoice,
   deleteTemplate,
   invoiceCanBeModerated,
+  invoiceListedForAdmin,
   invoiceNeedsApproval,
   isAdminEmail,
   listInvoices,
@@ -97,15 +98,20 @@ export default function DashboardPage() {
     [pendingInvoices, approvalUser]
   );
 
+  const listedInvoices = useMemo(
+    () => invoices.filter((r) => invoiceListedForAdmin(r, isAdmin)),
+    [invoices, isAdmin]
+  );
+
   const statusCounts = useMemo(() => {
     const counts: Partial<Record<InvoiceStatus, number>> = {};
-    for (const row of invoices) counts[row.status as InvoiceStatus] = (counts[row.status as InvoiceStatus] ?? 0) + 1;
+    for (const row of listedInvoices) counts[row.status as InvoiceStatus] = (counts[row.status as InvoiceStatus] ?? 0) + 1;
     return counts;
-  }, [invoices]);
+  }, [listedInvoices]);
 
   const filteredInvoices = useMemo(
-    () => (statusFilter === 'all' ? invoices : invoices.filter((r) => r.status === statusFilter)),
-    [invoices, statusFilter]
+    () => (statusFilter === 'all' ? listedInvoices : listedInvoices.filter((r) => r.status === statusFilter)),
+    [listedInvoices, statusFilter]
   );
 
   const load = useCallback(async () => {
@@ -423,7 +429,7 @@ export default function DashboardPage() {
             <div className="space-y-2.5">{adminInvoices.map((row) => renderInvoiceCard(row))}</div>
           )
         ) : tab === 'invoices' ? (
-          invoices.length === 0 ? (
+          listedInvoices.length === 0 ? (
             <EmptyState
               icon={<FileText size={20} />}
               title="No invoices yet"
@@ -441,7 +447,7 @@ export default function DashboardPage() {
                 </button>
               )}
               <div className="flex flex-wrap gap-1.5">
-                <FilterChip label="All" count={invoices.length} active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
+                <FilterChip label="All" count={listedInvoices.length} active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
                 {(Object.keys(STATUS_STYLES) as InvoiceStatus[])
                   .filter((s) => statusCounts[s])
                   .map((s) => (

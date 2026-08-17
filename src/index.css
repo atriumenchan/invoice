@@ -18,6 +18,15 @@ body {
   .icon-btn {
     @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-600;
   }
+  .icon-action {
+    @apply relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#E8ECF4] bg-white text-slate-600 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .icon-action:hover .icon-tip {
+    @apply opacity-100;
+  }
+  .icon-tip {
+    @apply pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-md;
+  }
   .pill-add {
     @apply inline-flex items-center gap-2 self-start rounded-full border border-brand/25 bg-brand/5 px-4 py-2 text-[13px] font-semibold text-brand-deep transition-all duration-150 hover:bg-brand/10 active:scale-[0.98];
   }

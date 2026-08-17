@@ -699,20 +699,16 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
         </fieldset>
       </div>
 
-      {/* sticky download bar */}
-      <div className="border-t border-[#E8ECF4] bg-white/80 px-4 py-3.5 backdrop-blur-xl">
-        <div className="mb-2.5 flex items-center justify-between">
-          <span className="text-[12px] font-medium text-slate-500">Total</span>
-          <span className="text-[15px] font-bold tabular-nums text-slate-900">
+      {/* sticky action bar */}
+      <div className="border-t border-[#E8ECF4] bg-white/80 px-3 py-2 backdrop-blur-xl">
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-[13px] font-bold tabular-nums text-slate-900">
             {state.currency} {fmt2(total)}
           </span>
-        </div>
-        {session && (
-          <div className="mb-2.5 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-            <span className="text-[12px] font-medium text-slate-500">Status</span>
+          {session && (
             <span
               className={
-                'rounded-full px-2.5 py-0.5 text-[11px] font-bold capitalize ' +
+                'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold capitalize ' +
                 (state.status === 'approved'
                   ? 'bg-emerald-100 text-emerald-600'
                   : state.status === 'pending'
@@ -727,95 +723,100 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
                 : state.status === 'rejected'
                   ? 'sent back'
                   : state.status === 'pending'
-                    ? 'waiting for approval'
+                    ? 'waiting'
                     : 'draft'}
             </span>
-          </div>
-        )}
-        {session && (
-          <div className="mb-2.5 flex items-center gap-1.5">
+          )}
+        </div>
+        <div className="flex items-center justify-center gap-1">
+          {session && (
+            <>
+              <button
+                type="button"
+                onClick={onSaveTemplate}
+                disabled={cloudBusy}
+                aria-label="Save as template"
+                className="icon-action"
+              >
+                <LayoutTemplate size={15} />
+                <span className="icon-tip">Save as template</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => runReview()}
+                disabled={cloudBusy}
+                aria-label="AI review"
+                className="icon-action text-brand-deep"
+              >
+                <Sparkles size={15} />
+                <span className="icon-tip">AI review</span>
+              </button>
+            </>
+          )}
+          {session && canEdit && (
             <button
               type="button"
-              onClick={onSaveTemplate}
+              onClick={() => onSaveInvoice()}
               disabled={cloudBusy}
-              title="Save as template"
-              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#E8ECF4] bg-white text-[12px] font-semibold text-slate-600 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.97] disabled:opacity-60"
+              aria-label="Save"
+              className="icon-action"
             >
-              <LayoutTemplate size={14} />
-              <span className="truncate">Save as template</span>
+              <Save size={15} />
+              <span className="icon-tip">{cloudBusy ? 'Saving…' : 'Save'}</span>
             </button>
+          )}
+          {session && canSubmitForApproval(access) && (
             <button
               type="button"
-              onClick={() => runReview()}
+              onClick={sendForApproval}
               disabled={cloudBusy}
-              title="AI Review"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-brand/25 bg-brand/5 text-brand-deep transition-all duration-150 hover:bg-brand/10 active:scale-[0.97] disabled:opacity-60"
+              aria-label="Send for approval"
+              className="icon-action bg-blue-600 text-white hover:bg-blue-700 hover:text-white"
             >
-              <Sparkles size={15} />
+              <Send size={15} />
+              <span className="icon-tip">{cloudBusy ? 'Sending…' : 'Send for approval'}</span>
             </button>
-          </div>
-        )}
-        {session && canEdit && (
+          )}
+          {session && canSaveAndApprove(access) && (
+            <>
+              <button
+                type="button"
+                onClick={() => onSaveInvoice({ reject: true })}
+                disabled={cloudBusy}
+                aria-label="Send back"
+                className="icon-action bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700"
+              >
+                <X size={15} />
+                <span className="icon-tip">Send back</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onSaveInvoice({ approve: true })}
+                disabled={cloudBusy}
+                aria-label="Save and approve"
+                className="icon-action bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white"
+              >
+                <Check size={15} />
+                <span className="icon-tip">{cloudBusy ? 'Saving…' : 'Save & approve'}</span>
+              </button>
+            </>
+          )}
           <button
             type="button"
-            onClick={() => onSaveInvoice()}
-            disabled={cloudBusy}
-            className="mb-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-[#E8ECF4] bg-white py-2.5 text-[13px] font-bold text-slate-800 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.99] disabled:opacity-60"
+            onClick={onDownload}
+            disabled={downloading || !canDownload}
+            aria-label="Download PDF"
+            className="icon-action bg-gradient-to-r from-brand-deep to-brand text-white shadow-sm shadow-brand/20 hover:text-white"
           >
-            <Save size={15} />
-            {cloudBusy ? 'Saving…' : 'Save'}
+            <Download size={15} />
+            <span className="icon-tip">{downloading ? 'Generating…' : 'Download PDF'}</span>
           </button>
-        )}
-        {session && canSubmitForApproval(access) && (
-          <button
-            type="button"
-            onClick={sendForApproval}
-            disabled={cloudBusy}
-            className="mb-2.5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-[13px] font-bold text-white transition-all duration-150 hover:bg-blue-700 active:scale-[0.99] disabled:opacity-60"
-          >
-            <Send size={15} />
-            {cloudBusy ? 'Sending…' : 'Send for approval'}
-          </button>
-        )}
-        {session && canSaveAndApprove(access) && (
-          <div className="mb-2.5 flex gap-1.5">
-            <button
-              type="button"
-              onClick={() => onSaveInvoice({ reject: true })}
-              disabled={cloudBusy}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-50 py-2.5 text-[12.5px] font-bold text-rose-600 transition-all duration-150 hover:bg-rose-100 active:scale-[0.99] disabled:opacity-60"
-            >
-              <X size={15} />
-              Send back
-            </button>
-            <button
-              type="button"
-              onClick={() => onSaveInvoice({ approve: true })}
-              disabled={cloudBusy}
-              className="flex flex-[1.4] items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-[12.5px] font-bold text-white transition-all duration-150 hover:bg-emerald-700 active:scale-[0.99] disabled:opacity-60"
-            >
-              <Check size={15} />
-              {cloudBusy ? 'Saving…' : 'Save & approve'}
-            </button>
-          </div>
-        )}
+        </div>
         {cloudMsg && (
-          <p className="mb-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-center text-[12px] font-semibold text-emerald-600">
+          <p className="mt-1.5 rounded-lg bg-emerald-50 px-2 py-1 text-center text-[11px] font-semibold text-emerald-600">
             {cloudMsg}
           </p>
         )}
-        <button
-          type="button"
-          onClick={onDownload}
-          disabled={downloading || !canDownload}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-deep to-brand py-3 text-[14px] font-bold text-white shadow-lg shadow-brand/25 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-brand/30 active:translate-y-0 active:scale-[0.99] disabled:cursor-wait disabled:opacity-60 disabled:hover:translate-y-0"
-        >
-          <Download size={16} />
-          {downloading ? 'Generating…' : 'Download PDF'}
-        </button>
-        <p className="mt-2 text-center text-[11px] text-slate-400">
-          Ctrl+S save · Ctrl+Enter download
-        </p>
       </div>
 
       <ReviewModal
