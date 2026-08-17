@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY as string;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL || '').toLowerCase();
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL || 'ryan@admexo.com').toLowerCase();
 
 async function requireAdmin(req: VercelRequest, res: VercelResponse) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
@@ -32,7 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
   if (req.method === 'GET') {
-    const { data, error } = await admin.auth.admin.listUsers({ perPage: 100 });
+    const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 });
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json({
       users: data.users.map((u) => ({

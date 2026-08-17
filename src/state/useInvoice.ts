@@ -129,6 +129,7 @@ export function useInvoice() {
   const [downloading, setDownloading] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const dirtyRef = useRef(false);
+  const savedAtMs = useRef(0);
   dirtyRef.current = dirty;
 
   const update = useCallback(<K extends keyof InvoiceState>(key: K, value: InvoiceState[K]) => {
@@ -216,9 +217,12 @@ export function useInvoice() {
   const markClean = useCallback(() => {
     setDirty(false);
     setSavedAt(new Date());
+    savedAtMs.current = Date.now();
   }, []);
 
   const loadRemote = useCallback((row: InvoiceRow) => {
+    const incoming = row.updated_at ? Date.parse(row.updated_at) : Date.now();
+    savedAtMs.current = Math.max(savedAtMs.current, incoming);
     setState(hydrateInvoiceState(
       {
         ...row.state,
@@ -234,14 +238,9 @@ export function useInvoice() {
   }, []);
 
   const applyRemoteIfClean = useCallback((row: InvoiceRow) => {
-    if (dirtyRef.current) {
-      setState((s) => ({
-        ...s,
-        status: (row.status as InvoiceState['status']) ?? s.status,
-        createdByEmail: s.createdByEmail || row.created_by_email,
-      }));
-      return;
-    }
+    if (dirtyRef.current) return;
+    const incoming = row.updated_at ? Date.parse(row.updated_at) : 0;
+    if (incoming && incoming < savedAtMs.current) return;
     loadRemote(row);
   }, [loadRemote]);
 

@@ -445,9 +445,6 @@ create or replace function public.enforce_invoice_edit_rules()
 returns trigger
 language plpgsql
 as $$
-declare
-  old_body jsonb;
-  new_body jsonb;
 begin
   new.user_id := old.user_id;
   new.created_by_email := old.created_by_email;
@@ -475,15 +472,11 @@ begin
     raise exception 'Only admin can reject invoices';
   end if;
 
-  old_body := case when jsonb_typeof(old.state) = 'object' then old.state - 'status' else '{}'::jsonb end;
-  new_body := case when jsonb_typeof(new.state) = 'object' then new.state - 'status' else '{}'::jsonb end;
-
   if old.status = 'approved' then
-    if new.status = 'pending' then
-      null;
-    elsif old_body is distinct from new_body then
-      new.status := 'draft';
-    else
+    -- Honor the client's explicit workflow status. Do not infer "edited"
+    -- from jsonb key noise (hydrated defaults), which previously forced
+    -- approved invoices back to draft on harmless saves.
+    if new.status not in ('draft', 'pending', 'approved') then
       new.status := 'approved';
     end if;
   end if;

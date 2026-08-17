@@ -131,8 +131,8 @@ export default function DashboardPage() {
     load();
   }, [load]);
 
-  const openInvoice = (row: InvoiceRow) => {
-    navigate(`/invoice/${row.id}`);
+  const openInvoice = (row: InvoiceRow, download = false) => {
+    navigate(download ? `/invoice/${row.id}?download=1` : `/invoice/${row.id}`);
   };
 
   const cloneTemplate = async (row: TemplateRow) => {
@@ -300,7 +300,7 @@ export default function DashboardPage() {
         <FileText size={14} />
       </button>
       {canDownloadPdf(access) ? (
-        <button type="button" title="Download PDF" onClick={() => openInvoice(row)} className="icon-btn">
+        <button type="button" title="Download PDF" onClick={() => openInvoice(row, true)} className="icon-btn">
           <Download size={14} />
         </button>
       ) : (

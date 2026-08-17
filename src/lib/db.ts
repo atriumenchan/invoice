@@ -285,7 +285,6 @@ export type SaveInvoiceOpts = {
   submit?: boolean;
   approve?: boolean;
   reject?: boolean;
-  asAdmin?: boolean;
 };
 
 const FINGERPRINT_SKIP = new Set(['status', 'invoiceId', 'createdByEmail']);
@@ -315,36 +314,27 @@ export function invoiceContentFingerprint(s: Partial<InvoiceState> | null | unde
   return JSON.stringify(body);
 }
 
-function saverIsAdmin(saverEmail: string, opts?: SaveInvoiceOpts): boolean {
-  return isAdminEmail(saverEmail) || Boolean(opts?.asAdmin);
-}
-
-/**
- * Admin save keeps the current workflow status (approved stays approved).
- * Owner save of an approved invoice becomes draft only when the body changed,
- * so download turns off and Send for approval comes back.
- */
 function statusAfterSave(args: {
   live: InvoiceStatus | null;
   local: InvoiceStatus;
   hasId: boolean;
   ownerEmail: string | null;
   saverEmail: string;
+  admin: boolean;
   opts?: SaveInvoiceOpts;
   contentChanged: boolean;
 }): InvoiceStatus {
-  const { live, local, hasId, ownerEmail, saverEmail, opts, contentChanged } = args;
-  if (opts?.approve) return 'approved';
-  if (opts?.reject) return 'rejected';
+  const { live, local, hasId, ownerEmail, saverEmail, admin, opts, contentChanged } = args;
+  if (admin && opts?.approve) return 'approved';
+  if (admin && opts?.reject) return 'rejected';
   if (opts?.submit) return 'pending';
-  if (saverIsAdmin(saverEmail, opts)) {
+  if (admin) {
     if (!hasId) return 'approved';
     if (isAdminEmail(ownerEmail || saverEmail)) return 'approved';
     return live ?? local;
   }
   if (live === 'approved') return contentChanged ? 'draft' : 'approved';
   if (live === 'pending' || live === 'rejected' || live === 'void') return live;
-  if (local === 'pending' || local === 'rejected' || local === 'approved') return local;
   return 'draft';
 }
 
@@ -370,13 +360,30 @@ export async function saveInvoiceToCloud(
   if (!auth.user) throw new Error('Not signed in');
   const user_id = auth.user.id;
   const saverEmail = auth.user.email ?? '';
+  const { data: adminRpc } = await supabase.rpc('is_admin');
+  const admin = isAdminEmail(saverEmail) || Boolean(adminRpc);
+  if (!admin && (opts?.approve || opts?.reject)) {
+    throw new Error('Only admin can approve or send back invoices');
+  }
   const t = computeTotals(s);
-  const approving = Boolean(opts?.approve);
-  const rejecting = Boolean(opts?.reject);
+  const approving = Boolean(opts?.approve) && admin;
+  const rejecting = Boolean(opts?.reject) && admin;
   const existing = s.invoiceId ? await getInvoice(s.invoiceId) : null;
   const live = (existing?.status as InvoiceStatus | undefined) ?? null;
+  const existingHydrated = existing
+    ? hydrateInvoiceState(
+        {
+          ...existing.state,
+          invoiceId: existing.id,
+          invNo: existing.invoice_no,
+          status: existing.status as InvoiceStatus,
+          createdByEmail: existing.created_by_email,
+        },
+        { applyStampDefaults: false }
+      )
+    : null;
   const contentChanged = Boolean(
-    existing && invoiceContentFingerprint(s) !== invoiceContentFingerprint(existing.state)
+    existingHydrated && invoiceContentFingerprint(s) !== invoiceContentFingerprint(existingHydrated)
   );
   let status = statusAfterSave({
     live,
@@ -384,6 +391,7 @@ export async function saveInvoiceToCloud(
     hasId: Boolean(s.invoiceId),
     ownerEmail: s.createdByEmail,
     saverEmail,
+    admin,
     opts,
     contentChanged,
   });
@@ -422,10 +430,11 @@ export async function saveInvoiceToCloud(
     state: stateToStore,
   };
   if (opts?.submit) row.submitted_at = new Date().toISOString();
-  if (status === 'approved') {
+  if (status === 'approved' && live !== 'approved') {
     row.approved_at = new Date().toISOString();
     row.approved_by = saverEmail || null;
   }
+  row.last_edited_by = saverEmail || null;
   if (s.invoiceId) {
     const { data, error } = await supabase.from('invoices').update(row).eq('id', s.invoiceId).select('id');
     if (error) {

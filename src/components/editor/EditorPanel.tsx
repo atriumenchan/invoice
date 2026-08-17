@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import * as Accordion from '@radix-ui/react-accordion';
 import {
   Building2,
@@ -83,6 +83,8 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   const { total } = computeTotals(state);
   const { session, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const downloadQueryOnce = useRef(false);
   const access = {
     isAdmin,
     status: state.status,
@@ -140,6 +142,21 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       alert((e as Error).message);
     }
   };
+
+  useEffect(() => {
+    if (params.get('download') !== '1') return;
+    if (downloadQueryOnce.current) return;
+    if (!canDownload) return;
+    downloadQueryOnce.current = true;
+    const t = window.setTimeout(() => {
+      void onDownload();
+      const next = new URLSearchParams(params);
+      next.delete('download');
+      setParams(next, { replace: true });
+    }, 400);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canDownload, params, state.invoiceId]);
 
   useEffect(() => {
     if (!session) return;
@@ -230,7 +247,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       const s = stateRef.current;
       if (contentKey(s) === baselineRef.current) return;
       try {
-        const saved = await saveInvoiceToCloud(s, { asAdmin: isAdmin });
+        const saved = await saveInvoiceToCloud(s);
         applySaved(s, saved, session.user.email);
       } catch (e) {
         console.error('Auto-save failed', e);
@@ -238,7 +255,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     }, 1500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, dirty, canEdit, state, isAdmin]);
+  }, [session, dirty, canEdit, state]);
 
   const flash = (msg: string) => {
     setCloudMsg(msg);
@@ -338,7 +355,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     if (!canEdit && !opts?.approve && !opts?.reject) return;
     setCloudBusy(true);
     try {
-      const saved = await saveInvoiceToCloud(state, { ...opts, asAdmin: isAdmin });
+      const saved = await saveInvoiceToCloud(state, opts);
       applySaved(state, saved, session.user.email);
       if (opts?.approve) flash(`Saved and approved as ${saved.invoice_no}`);
       else if (opts?.reject) flash('Sent back — the creator can edit and resubmit');
