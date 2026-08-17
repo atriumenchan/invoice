@@ -65,3 +65,14 @@ export function lockReason(ctx: AccessCtx): string | null {
   if (ctx.status === 'void') return 'This invoice is voided.';
   return 'Only the person who created this invoice (or admin) can edit it.';
 }
+
+/** Shown to the creator (not admin) on an approved invoice before they change it. */
+export function ownerApprovedEditDisclaimer(ctx: AccessCtx): string | null {
+  if (ctx.isAdmin) return null;
+  if (ctx.status !== 'approved') return null;
+  if (!ctx.invoiceId) return null;
+  const me = (ctx.currentEmail || '').toLowerCase();
+  const owner = (ctx.ownerEmail || '').toLowerCase();
+  if (!me || owner !== me) return null;
+  return 'This invoice is approved. If you edit it, you will need to send it for approval again before it can be downloaded.';
+}

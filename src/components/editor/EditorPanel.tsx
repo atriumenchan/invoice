@@ -54,6 +54,7 @@ import {
   canSubmitForApproval,
   isAdminEmail,
   lockReason,
+  ownerApprovedEditDisclaimer,
 } from '../../lib/permissions';
 import { SectionCard } from './SectionCard';
 import { EyeChip, Field, MiniStepper, Select, Switch, TextArea } from './Field';
@@ -96,6 +97,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   const canNumber = canChangeInvoiceNumber(access);
   const canDownload = canDownloadPdf(access);
   const lockedMsg = lockReason(access);
+  const ownerDisclaimer = ownerApprovedEditDisclaimer(access);
   const isAdminOwn = isAdminEmail(state.createdByEmail) || (!state.createdByEmail && isAdmin);
   const [issuers, setIssuers] = useState<IssuerRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
@@ -465,6 +467,9 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       <div className="flex-1 overflow-y-auto px-4 py-5">
         {lockedMsg && (
           <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-800">{lockedMsg}</p>
+        )}
+        {ownerDisclaimer && (
+          <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-800">{ownerDisclaimer}</p>
         )}
         {isAdmin && state.invoiceId && !isAdminOwn && (
           <p className="mb-3 rounded-xl bg-slate-50 px-3 py-2 text-[12px] font-medium text-slate-600">
