@@ -700,35 +700,70 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       </div>
 
       {/* sticky action bar */}
-      <div className="border-t border-[#E8ECF4] bg-white/80 px-3 py-2 backdrop-blur-xl">
-        <div className="mb-1.5 flex items-center justify-between gap-2">
-          <span className="min-w-0 truncate text-[13px] font-bold tabular-nums text-slate-900">
-            {state.currency} {fmt2(total)}
-          </span>
-          {session && (
-            <span
+      <div className="border-t border-[#E8ECF4] bg-white/90 px-3.5 py-3 backdrop-blur-xl">
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Total</p>
+            <p className="mt-1 truncate text-[17px] font-bold tabular-nums leading-tight text-slate-900">
+              {state.currency} {fmt2(total)}
+            </p>
+          </div>
+          {session ? (
+            <div
               className={
-                'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold capitalize ' +
+                'rounded-2xl px-3 py-2.5 ' +
                 (state.status === 'approved'
-                  ? 'bg-emerald-100 text-emerald-600'
+                  ? 'bg-emerald-50'
                   : state.status === 'pending'
-                    ? 'bg-blue-100 text-blue-600'
+                    ? 'bg-blue-50'
                     : state.status === 'rejected'
-                      ? 'bg-rose-100 text-rose-600'
-                      : 'bg-slate-200 text-slate-500')
+                      ? 'bg-rose-50'
+                      : 'bg-slate-50')
               }
             >
-              {state.status === 'approved'
-                ? 'approved'
-                : state.status === 'rejected'
-                  ? 'sent back'
-                  : state.status === 'pending'
-                    ? 'waiting'
-                    : 'draft'}
-            </span>
+              <p
+                className={
+                  'text-[10px] font-semibold uppercase tracking-[0.14em] ' +
+                  (state.status === 'approved'
+                    ? 'text-emerald-500'
+                    : state.status === 'pending'
+                      ? 'text-blue-500'
+                      : state.status === 'rejected'
+                        ? 'text-rose-400'
+                        : 'text-slate-400')
+                }
+              >
+                Status
+              </p>
+              <p
+                className={
+                  'mt-1 text-[13px] font-bold leading-tight ' +
+                  (state.status === 'approved'
+                    ? 'text-emerald-700'
+                    : state.status === 'pending'
+                      ? 'text-blue-700'
+                      : state.status === 'rejected'
+                        ? 'text-rose-700'
+                        : 'text-slate-600')
+                }
+              >
+                {state.status === 'approved'
+                  ? 'Approved'
+                  : state.status === 'rejected'
+                    ? 'Sent back'
+                    : state.status === 'pending'
+                      ? 'Waiting for approval'
+                      : 'Draft'}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Status</p>
+              <p className="mt-1 text-[13px] font-bold text-slate-600">Draft</p>
+            </div>
           )}
         </div>
-        <div className="flex items-center justify-center gap-1">
+        <div className="flex items-center justify-center gap-1.5">
           {session && (
             <>
               <button
