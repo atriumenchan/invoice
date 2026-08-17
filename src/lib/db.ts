@@ -288,15 +288,15 @@ export type SaveInvoiceOpts = {
 };
 
 function resolveSaveStatus(s: InvoiceState, saverEmail: string, opts?: SaveInvoiceOpts): InvoiceStatus {
+  if (opts?.approve) return 'approved';
+  if (opts?.reject) return 'rejected';
+  if (opts?.submit) return 'pending';
   if (!isAdminEmail(saverEmail)) {
-    if (opts?.submit) return 'pending';
     if (s.status === 'pending') return 'pending';
     if (s.status === 'rejected') return 'rejected';
     if (s.status === 'approved') return 'approved';
     return 'draft';
   }
-  if (opts?.approve) return 'approved';
-  if (opts?.reject) return 'rejected';
   if (!s.invoiceId) return 'approved';
   const owner = (s.createdByEmail || saverEmail).toLowerCase();
   if (isAdminEmail(owner)) return 'approved';
@@ -326,8 +326,13 @@ export async function saveInvoiceToCloud(
   const user_id = auth.user.id;
   const saverEmail = auth.user.email ?? '';
   const t = computeTotals(s);
+  const approving = Boolean(opts?.approve);
+  const rejecting = Boolean(opts?.reject);
   let status = resolveSaveStatus(s, saverEmail, opts);
-  if (s.invoiceId && !isAdminEmail(saverEmail) && !opts?.submit) {
+  if (s.invoiceId && (approving || rejecting)) {
+    const live = await getInvoiceStatus(s.invoiceId);
+    if (live) status = live as InvoiceStatus;
+  } else if (s.invoiceId && !opts?.submit) {
     const live = await getInvoiceStatus(s.invoiceId);
     if (live === 'approved' || live === 'pending' || live === 'rejected' || live === 'void') {
       status = live;
@@ -337,7 +342,7 @@ export async function saveInvoiceToCloud(
   let invoice_no: string;
   if (s.invoiceId) {
     invoice_no = (s.invNo || '').trim().replace(/^#+/, '');
-    await assertInvoiceNumberFree(invoice_no, s.invoiceId, { strict: status === 'approved' || Boolean(opts?.approve) });
+    await assertInvoiceNumberFree(invoice_no, s.invoiceId, { strict: false });
   } else {
     const manual = (s.invNo || '').trim();
     invoice_no = !manual || manual.startsWith('#') ? await nextInvoiceNumber(s.invPrefix || 'INV') : manual;
@@ -354,8 +359,8 @@ export async function saveInvoiceToCloud(
   const row: Record<string, unknown> = {
     invoice_no,
     title: opts?.title ?? s.toName ?? '',
-    issuer_id: s.issuerId,
-    client_id: s.clientId,
+    issuer_id: s.issuerId || null,
+    client_id: s.clientId || null,
     status,
     currency: s.currency,
     subtotal: t.subtotal,
@@ -379,6 +384,14 @@ export async function saveInvoiceToCloud(
       throw new Error(
         'This invoice could not be updated — it may belong to a different account or have been deleted. Please start a new invoice.'
       );
+    }
+    if (approving) {
+      await setInvoiceStatus(s.invoiceId, 'approved');
+      return { id: s.invoiceId, invoice_no, status: 'approved' };
+    }
+    if (rejecting) {
+      await setInvoiceStatus(s.invoiceId, 'rejected');
+      return { id: s.invoiceId, invoice_no, status: 'rejected' };
     }
     return { id: s.invoiceId, invoice_no, status };
   }

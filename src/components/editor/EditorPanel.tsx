@@ -40,6 +40,8 @@ import {
   nextInvoiceNumber,
   InvoiceNumberTakenError,
   notifyApprovalSubmitted,
+  setInvoiceStatus,
+  assignInvoiceNumber,
   type BankRow,
   type ClientRow,
   type IssuerRow,
@@ -351,6 +353,23 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
         }).catch((err) => console.error('WhatsApp notify failed', err));
       } else flash(`Saved ${saved.invoice_no} — everyone will see this version`);
     } catch (e) {
+      if (opts?.approve && e instanceof InvoiceNumberTakenError && state.invoiceId) {
+        const next = e.suggestion ?? state.invNo;
+        const chosen = window.prompt(
+          `Invoice number "${state.invNo}" is already used on another invoice. Change it before approving:`,
+          next
+        );
+        if (!chosen) return;
+        try {
+          await assignInvoiceNumber(state.invoiceId, chosen.trim());
+          await setInvoiceStatus(state.invoiceId, 'approved');
+          applySaved(state, { id: state.invoiceId, invoice_no: chosen.trim(), status: 'approved' }, session.user.email);
+          flash(`Saved and approved as ${chosen.trim()}`);
+        } catch (err) {
+          alert((err as Error).message);
+        }
+        return;
+      }
       if (!handleNumberError(e)) alert('Could not save invoice: ' + (e as Error).message);
     } finally {
       setCloudBusy(false);
