@@ -13,12 +13,14 @@ export function InvoiceNumberField({
   invoiceId,
   signedIn,
   strict,
+  disabled,
   onChange,
 }: {
   value: string;
   invoiceId: string | null;
   signedIn: boolean;
   strict?: boolean;
+  disabled?: boolean;
   onChange: (next: string) => void;
 }) {
   const [status, setStatus] = useState<'idle' | 'checking' | 'ok' | 'taken'>('idle');
@@ -54,7 +56,7 @@ export function InvoiceNumberField({
 
   return (
     <div>
-      <Field label="Invoice number" value={value} onChange={(e) => onChange(e.target.value)} />
+      <Field label="Invoice number" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
       {status === 'checking' && (
         <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-400">
           <Loader2 size={11} className="animate-spin" /> Checking all invoices…

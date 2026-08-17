@@ -18,7 +18,6 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../state/AuthContext';
-import { STORAGE_KEY, hydrateInvoiceState } from '../state/useInvoice';
 import { supabase } from '../lib/supabase';
 import {
   cloneTemplateAsInvoice,
@@ -40,6 +39,7 @@ import {
 import { cn } from '../lib/utils';
 import type { InvoiceStatus } from '../types';
 import { inputCls } from '../components/editor/Field';
+import { canDeleteInvoice, canEditInvoiceContent } from '../lib/permissions';
 
 const STATUS_STYLES: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-600',
@@ -125,19 +125,7 @@ export default function DashboardPage() {
   }, [load]);
 
   const openInvoice = (row: InvoiceRow) => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(
-        hydrateInvoiceState({
-          ...row.state,
-          invoiceId: row.id,
-          invNo: row.invoice_no,
-          status: row.status as InvoiceStatus,
-          createdByEmail: row.created_by_email,
-        })
-      )
-    );
-    navigate('/');
+    navigate(`/invoice/${row.id}`);
   };
 
   const cloneTemplate = async (row: TemplateRow) => {
@@ -190,12 +178,10 @@ export default function DashboardPage() {
   };
 
   const openTemplate = (row: TemplateRow) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(hydrateInvoiceState({ ...row.state, invoiceId: null })));
-    navigate('/');
+    navigate(`/?template=${row.id}`);
   };
 
   const newInvoice = () => {
-    localStorage.removeItem(STORAGE_KEY);
     navigate('/');
   };
 
@@ -208,6 +194,17 @@ export default function DashboardPage() {
   };
 
   const removeInvoice = async (row: InvoiceRow) => {
+    if (
+      !canDeleteInvoice({
+        isAdmin,
+        status: row.status as InvoiceStatus,
+        ownerEmail: row.created_by_email,
+        currentEmail: session?.user.email,
+      })
+    ) {
+      alert('You can only delete your own draft or sent-back invoices. Approved invoices stay in the system.');
+      return;
+    }
     if (!window.confirm(`Delete invoice ${row.invoice_no}? This cannot be undone.`)) return;
     await deleteInvoice(row.id);
     load();
@@ -219,7 +216,14 @@ export default function DashboardPage() {
     load();
   };
 
-  const renderInvoiceCard = (row: InvoiceRow) => (
+  const renderInvoiceCard = (row: InvoiceRow) => {
+    const access = {
+      isAdmin,
+      status: row.status as InvoiceStatus,
+      ownerEmail: row.created_by_email,
+      currentEmail: session?.user.email,
+    };
+    return (
     <div
       key={row.id}
       className="flex items-center gap-3 rounded-2xl border border-[#E8ECF4] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)]"
@@ -253,7 +257,7 @@ export default function DashboardPage() {
         <>
           <button
             type="button"
-            title="Approve"
+            title="Approve the saved cloud copy. Open the invoice first if you need to change it, then use Save & approve."
             onClick={() => moderate(row, 'approved')}
             className="icon-btn bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
           >
@@ -269,25 +273,30 @@ export default function DashboardPage() {
           </button>
         </>
       )}
-      <button type="button" title="Rename" onClick={() => renameInvoiceRow(row)} className="icon-btn">
-        <Pencil size={14} />
-      </button>
-      <button type="button" title="Open in builder" onClick={() => openInvoice(row)} className="icon-btn">
+      {canEditInvoiceContent(access) && (
+        <button type="button" title="Rename" onClick={() => renameInvoiceRow(row)} className="icon-btn">
+          <Pencil size={14} />
+        </button>
+      )}
+      <button type="button" title="Review / edit" onClick={() => openInvoice(row)} className="icon-btn">
         <FileText size={14} />
       </button>
       <button type="button" title="Email invoice" onClick={() => emailInvoice(row)} className="icon-btn">
         <Mail size={14} />
       </button>
-      <button
-        type="button"
-        title="Delete"
-        onClick={() => removeInvoice(row)}
-        className="icon-btn hover:bg-rose-50 hover:text-rose-500"
-      >
-        <Trash2 size={14} />
-      </button>
+      {canDeleteInvoice(access) && (
+        <button
+          type="button"
+          title="Delete"
+          onClick={() => removeInvoice(row)}
+          className="icon-btn hover:bg-rose-50 hover:text-rose-500"
+        >
+          <Trash2 size={14} />
+        </button>
+      )}
     </div>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">

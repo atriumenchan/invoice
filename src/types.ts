@@ -93,6 +93,8 @@ export interface InvoiceState {
   signName: string;
   signTitle: string;
   signImage: string | null;
+  /** Custom uploaded stamp. Null uses the hardcoded default stamp file. */
+  stampImage: string | null;
 
   footCompany: string;
   footRegions: string;

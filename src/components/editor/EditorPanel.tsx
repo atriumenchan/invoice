@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import * as Accordion from '@radix-ui/react-accordion';
 import {
   Building2,
+  Check,
   Download,
   FileText,
   Landmark,
@@ -22,6 +23,7 @@ import {
   Droplets,
   RotateCw,
   Type,
+  X,
 } from 'lucide-react';
 import type { EntityRegion, InvoiceState, InvoiceStatus } from '../../types';
 import type { InvoiceApi } from '../../state/useInvoice';
@@ -31,7 +33,6 @@ import {
   ensureDefaultIssuers,
   listBanks,
   listClients,
-  listIssuers,
   saveBank,
   saveClient,
   saveInvoiceToCloud,
@@ -39,26 +40,59 @@ import {
   nextInvoiceNumber,
   assertInvoiceNumberFree,
   InvoiceNumberTakenError,
+  notifyApprovalSubmitted,
   type BankRow,
   type ClientRow,
   type IssuerRow,
 } from '../../lib/db';
+import {
+  canChangeInvoiceNumber,
+  canDownloadPdf,
+  canEditInvoiceContent,
+  canSaveAndApprove,
+  canSubmitForApproval,
+  isAdminEmail,
+  lockReason,
+} from '../../lib/permissions';
 import { SectionCard } from './SectionCard';
 import { EyeChip, Field, MiniStepper, Select, Switch, TextArea } from './Field';
 import { ReviewModal } from '../ReviewModal';
 import { reviewInvoice, type ReviewResult } from '../../lib/ai';
-import { getInvoiceStatus } from '../../lib/db';
 import { LineItemsSection } from './LineItemsSection';
-import { SignatureSection } from './SignatureSection';
+import { SignatureSection, StampUpload } from './SignatureSection';
 import { InvoiceNumberField } from './InvoiceNumberField';
 import { CustomFields } from './CustomFields';
 import { ChargesEditor } from './ChargesEditor';
-import { fetchSignStyleCloud, saveSignStyleCloud, writeStampLast } from '../../lib/stampPrefs';
+import { fetchSignStyleCloud, saveSignStyleCloud } from '../../lib/stampPrefs';
 
 export function EditorPanel({ inv }: { inv: InvoiceApi }) {
-  const { state, update, updateSilent, applyEntity, items, notes, dirty, savedAt, saveNow, downloading, downloadPDF } = inv;
+  const {
+    state,
+    update,
+    updateSilent,
+    applyEntity,
+    items,
+    notes,
+    dirty,
+    savedAt,
+    markClean,
+    downloading,
+    downloadPDF,
+  } = inv;
   const { total } = computeTotals(state);
   const { session, isAdmin } = useAuth();
+  const navigate = useNavigate();
+  const access = {
+    isAdmin,
+    status: state.status,
+    ownerEmail: state.createdByEmail,
+    currentEmail: session?.user.email,
+  };
+  const canEdit = canEditInvoiceContent(access);
+  const canNumber = canChangeInvoiceNumber(access);
+  const canDownload = canDownloadPdf(access);
+  const lockedMsg = lockReason(access);
+  const isAdminOwn = isAdminEmail(state.createdByEmail) || (!state.createdByEmail && isAdmin);
   const [issuers, setIssuers] = useState<IssuerRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [banks, setBanks] = useState<BankRow[]>([]);
@@ -70,7 +104,6 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   const [reviewError, setReviewError] = useState<string | null>(null);
   const styleCloudReady = useRef(false);
 
-  const canDownload = isAdmin || state.status === 'approved';
   const runReview = async () => {
     setReviewOpen(true);
     setReviewLoading(true);
@@ -117,7 +150,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   }, [session]);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || state.invoiceId) return;
     let cancelled = false;
     fetchSignStyleCloud()
       .then((prefs) => {
@@ -126,7 +159,6 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
         updateSilent('stampRotate', prefs.stampRotate);
         updateSilent('stampFontSize', prefs.stampFontSize);
         updateSilent('signFontSize', prefs.signFontSize);
-        writeStampLast(prefs);
       })
       .catch(() => {})
       .finally(() => {
@@ -135,10 +167,11 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     return () => {
       cancelled = true;
     };
-  }, [session, updateSilent]);
+  }, [session, state.invoiceId, updateSilent]);
 
   useEffect(() => {
-    if (!session || !styleCloudReady.current) return;
+    if (!session || !canEdit) return;
+    if (state.invoiceId && !styleCloudReady.current) return;
     const prefs = {
       stampOpacity: state.stampOpacity,
       stampRotate: state.stampRotate,
@@ -149,7 +182,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       saveSignStyleCloud(prefs).catch(() => {});
     }, 600);
     return () => clearTimeout(t);
-  }, [session, state.stampOpacity, state.stampRotate, state.stampFontSize, state.signFontSize]);
+  }, [session, canEdit, state.invoiceId, state.stampOpacity, state.stampRotate, state.stampFontSize, state.signFontSize]);
 
   /* New invoices get the next free company-wide number (BG-IN-0004 if 0003 exists). */
   useEffect(() => {
@@ -166,18 +199,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, state.invoiceId, state.invPrefix]);
 
-  /* pull the live status so admin approvals show up for the creator */
-  useEffect(() => {
-    if (!session || !state.invoiceId) return;
-    getInvoiceStatus(state.invoiceId)
-      .then((live) => {
-        if (live && live !== state.status) updateSilent('status', live as InvoiceStatus);
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, state.invoiceId]);
-
-  /* Cloud auto-save: any signed-in user. Team users stay draft until they send for approval. */
+  /* Cloud auto-save writes the full invoice to Supabase so admin edits are canonical. */
   const stateRef = useRef(state);
   stateRef.current = state;
   const baselineRef = useRef('');
@@ -189,29 +211,39 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   }, [state.invoiceId]);
 
   useEffect(() => {
-    if (!session || !dirty) return;
+    if (!session || !dirty || !canEdit) return;
     if (contentKey(state) === baselineRef.current) return;
     const t = setTimeout(async () => {
       const s = stateRef.current;
       if (contentKey(s) === baselineRef.current) return;
       try {
-        const { id, invoice_no, status } = await saveInvoiceToCloud(s);
-        baselineRef.current = contentKey({ ...s, invoiceId: id, invNo: invoice_no, status });
-        if (id !== s.invoiceId) updateSilent('invoiceId', id);
-        if (invoice_no !== s.invNo) updateSilent('invNo', invoice_no);
-        if (status !== s.status) updateSilent('status', status);
-        if (!s.createdByEmail && session.user.email) updateSilent('createdByEmail', session.user.email);
+        const saved = await saveInvoiceToCloud(s);
+        applySaved(s, saved, session.user.email);
       } catch (e) {
         console.error('Auto-save failed', e);
       }
     }, 1500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, dirty, state]);
+  }, [session, dirty, canEdit, state]);
 
   const flash = (msg: string) => {
     setCloudMsg(msg);
     setTimeout(() => setCloudMsg(null), 4000);
+  };
+
+  const applySaved = (
+    s: InvoiceState,
+    saved: { id: string; invoice_no: string; status: InvoiceStatus },
+    email?: string | null
+  ) => {
+    baselineRef.current = contentKey({ ...s, invoiceId: saved.id, invNo: saved.invoice_no, status: saved.status });
+    if (saved.id !== s.invoiceId) updateSilent('invoiceId', saved.id);
+    if (saved.invoice_no !== s.invNo) updateSilent('invNo', saved.invoice_no);
+    if (saved.status !== s.status) updateSilent('status', saved.status);
+    if (!s.createdByEmail && email) updateSilent('createdByEmail', email);
+    markClean();
+    if (!s.invoiceId && saved.id) navigate(`/invoice/${saved.id}`, { replace: true });
   };
 
   const applyIssuer = (id: string) => {
@@ -288,41 +320,34 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     }
   };
 
-  const onSaveInvoice = async () => {
-    if (!session) {
-      saveNow();
-      return;
-    }
+  const onSaveInvoice = async (opts?: { approve?: boolean; reject?: boolean; submit?: boolean }) => {
+    if (!session) return;
+    if (!canEdit && !opts?.approve && !opts?.reject) return;
     setCloudBusy(true);
     try {
-      const { id, invoice_no, status } = await saveInvoiceToCloud(state);
-      updateSilent('invoiceId', id);
-      updateSilent('invNo', invoice_no);
-      updateSilent('status', status);
-      if (!state.createdByEmail && session.user.email) updateSilent('createdByEmail', session.user.email);
-      saveNow();
+      const saved = await saveInvoiceToCloud(state, opts);
+      applySaved(state, saved, session.user.email);
+      if (opts?.approve) flash(`Saved and approved as ${saved.invoice_no}`);
+      else if (opts?.reject) flash('Sent back — the creator can edit and resubmit');
+      else if (opts?.submit) {
+        flash(`Sent for approval as ${saved.invoice_no}`);
+        const t = computeTotals(state);
+        void notifyApprovalSubmitted({
+          invoice_no: saved.invoice_no,
+          sender: session.user.email || 'a teammate',
+          client: state.toName || 'No client',
+          total: `${state.currency} ${fmt2(t.total)}`,
+        }).catch((err) => console.error('WhatsApp notify failed', err));
+      } else flash(`Saved ${saved.invoice_no} — everyone will see this version`);
     } catch (e) {
-      if (!handleNumberError(e)) console.error('Could not save invoice', e);
+      if (!handleNumberError(e)) alert('Could not save invoice: ' + (e as Error).message);
     } finally {
       setCloudBusy(false);
     }
   };
 
   const sendForApproval = async () => {
-    setCloudBusy(true);
-    try {
-      await assertInvoiceNumberFree(state.invNo, state.invoiceId, { strict: true });
-      const { id, invoice_no, status } = await saveInvoiceToCloud(state, { submit: true });
-      updateSilent('invoiceId', id);
-      updateSilent('invNo', invoice_no);
-      updateSilent('status', status);
-      if (!state.createdByEmail && session?.user.email) updateSilent('createdByEmail', session.user.email);
-      flash(`Sent for approval as ${invoice_no}`);
-    } catch (e) {
-      if (!handleNumberError(e)) alert('Could not send for approval: ' + (e as Error).message);
-    } finally {
-      setCloudBusy(false);
-    }
+    await onSaveInvoice({ submit: true });
   };
 
   const onSaveTemplate = async () => {
@@ -354,7 +379,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [saveNow, downloadPDF]);
+  }, [canEdit, session, state]);
 
   return (
     <div className="flex h-full flex-col">
@@ -389,6 +414,15 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
 
       {/* scrollable sections */}
       <div className="flex-1 overflow-y-auto px-4 py-5">
+        {lockedMsg && (
+          <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-800">{lockedMsg}</p>
+        )}
+        {isAdmin && state.invoiceId && !isAdminOwn && (
+          <p className="mb-3 rounded-xl bg-slate-50 px-3 py-2 text-[12px] font-medium text-slate-600">
+            Reviewing {state.createdByEmail || 'team'} invoice. Save writes this version for everyone. Save & approve locks it in.
+          </p>
+        )}
+        <fieldset disabled={!canEdit} className="min-w-0 border-0 p-0 disabled:opacity-80">
         <Accordion.Root type="multiple" defaultValue={[]} className="space-y-4">
           <SectionCard value="invoice" icon={FileText} title="Invoice Details" description="Entity, number, dates, currency & badge" accent="indigo" complete={Boolean(state.invNo && state.invDate)}>
             {session && issuers.length > 0 && (
@@ -416,6 +450,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               invoiceId={state.invoiceId}
               signedIn={Boolean(session)}
               strict={isAdmin}
+              disabled={!canNumber}
               onChange={(v) => update('invNo', v)}
             />
             <div className="grid grid-cols-2 gap-2.5">
@@ -605,7 +640,9 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               )}
               <Switch label="Stamp" checked={state.showStamp} onChange={(v) => update('showStamp', v)} />
               {state.showStamp && (
-                <div className="flex items-center justify-end gap-2.5 px-1 pb-0.5">
+                <div className="space-y-2 px-1 pb-1.5">
+                  <StampUpload state={state} update={update} />
+                  <div className="flex items-center justify-end gap-2.5">
                   <MiniStepper
                     label="Stamp opacity"
                     icon={<Droplets size={10} strokeWidth={2.2} />}
@@ -636,6 +673,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
                     max={56}
                     onChange={(n) => update('stampFontSize', n)}
                   />
+                  </div>
                 </div>
               )}
             </div>
@@ -651,6 +689,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             <Field label="Website" value={state.footWeb} onChange={(e) => update('footWeb', e.target.value)} />
           </SectionCard>
         </Accordion.Root>
+        </fieldset>
       </div>
 
       {/* sticky download bar */}
@@ -661,9 +700,9 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             {state.currency} {fmt2(total)}
           </span>
         </div>
-        {session && !isAdmin && (
+        {session && (
           <div className="mb-2.5 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-            <span className="text-[12px] font-medium text-slate-500">Approval</span>
+            <span className="text-[12px] font-medium text-slate-500">Status</span>
             <span
               className={
                 'rounded-full px-2.5 py-0.5 text-[11px] font-bold capitalize ' +
@@ -679,7 +718,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               {state.status === 'approved'
                 ? 'approved'
                 : state.status === 'rejected'
-                  ? 'rejected'
+                  ? 'sent back'
                   : state.status === 'pending'
                     ? 'waiting for approval'
                     : 'draft'}
@@ -709,7 +748,18 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             </button>
           </div>
         )}
-        {session && !isAdmin && state.status !== 'approved' && state.status !== 'pending' && (
+        {session && canEdit && (
+          <button
+            type="button"
+            onClick={() => onSaveInvoice()}
+            disabled={cloudBusy}
+            className="mb-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-[#E8ECF4] bg-white py-2.5 text-[13px] font-bold text-slate-800 transition-all duration-150 hover:border-brand hover:text-brand active:scale-[0.99] disabled:opacity-60"
+          >
+            <Save size={15} />
+            {cloudBusy ? 'Saving…' : 'Save'}
+          </button>
+        )}
+        {session && canSubmitForApproval(access) && (
           <button
             type="button"
             onClick={sendForApproval}
@@ -719,6 +769,28 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             <Send size={15} />
             {cloudBusy ? 'Sending…' : 'Send for approval'}
           </button>
+        )}
+        {session && canSaveAndApprove(access) && (
+          <div className="mb-2.5 flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => onSaveInvoice({ reject: true })}
+              disabled={cloudBusy}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-50 py-2.5 text-[12.5px] font-bold text-rose-600 transition-all duration-150 hover:bg-rose-100 active:scale-[0.99] disabled:opacity-60"
+            >
+              <X size={15} />
+              Send back
+            </button>
+            <button
+              type="button"
+              onClick={() => onSaveInvoice({ approve: true })}
+              disabled={cloudBusy}
+              className="flex flex-[1.4] items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-[12.5px] font-bold text-white transition-all duration-150 hover:bg-emerald-700 active:scale-[0.99] disabled:opacity-60"
+            >
+              <Check size={15} />
+              {cloudBusy ? 'Saving…' : 'Save & approve'}
+            </button>
+          </div>
         )}
         {cloudMsg && (
           <p className="mb-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-center text-[12px] font-semibold text-emerald-600">

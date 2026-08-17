@@ -11,7 +11,7 @@ export const inputCls =
   'h-12 w-full rounded-xl border border-[#E8ECF4] bg-[#F7F8F9] px-3.5 text-[14px] text-slate-900 ' +
   'shadow-[inset_0_1px_2px_rgba(16,24,40,0.03)] placeholder:text-slate-400 transition-all duration-150 ' +
   'hover:border-slate-300 focus:border-brand focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand/15 ' +
-  'focus:shadow-[0_4px_14px_-4px_rgba(124,108,240,0.3)]';
+  'focus:shadow-[0_4px_14px_-4px_rgba(124,108,240,0.3)] disabled:cursor-not-allowed disabled:opacity-60';
 
 const labelCls = 'mb-1.5 block text-[12.5px] font-medium text-slate-500';
 

@@ -28,6 +28,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<RequireAuth><BuilderPage /></RequireAuth>} />
+          <Route path="/invoice/:id" element={<RequireAuth><BuilderPage /></RequireAuth>} />
           <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
         </Routes>
       </BrowserRouter>

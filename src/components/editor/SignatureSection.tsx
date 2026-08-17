@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { Trash2, Upload } from 'lucide-react';
 import type { InvoiceState, SignMode } from '../../types';
 import type { InvoiceApi } from '../../state/useInvoice';
+import { DEFAULT_STAMP_SRC } from '../../assets/stamp';
 import { cn } from '../../lib/utils';
 import { Field, Select } from './Field';
 
@@ -117,6 +118,73 @@ export function SignatureSection({
         value={state.signTitle}
         onChange={(e) => update('signTitle', e.target.value)}
       />
+    </div>
+  );
+}
+
+export function StampUpload({
+  state,
+  update,
+}: {
+  state: InvoiceState;
+  update: InvoiceApi['update'];
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const onFile = (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      update('stampImage', e.target?.result as string);
+      update('showStamp', true);
+      update('showSignature', false);
+      update('signImage', null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="space-y-2">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          onFile(e.target.files?.[0]);
+          e.target.value = '';
+        }}
+      />
+      <div className="flex items-center gap-3 rounded-xl border border-[#E8ECF4] bg-white p-3">
+        <img
+          src={state.stampImage || DEFAULT_STAMP_SRC}
+          alt="stamp"
+          className="h-14 w-[120px] rounded-md bg-black object-contain"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-[12.5px] font-semibold text-slate-800">
+            {state.stampImage ? 'Custom stamp' : 'Default stamp'}
+          </p>
+          <p className="text-[11px] text-slate-400">Always kept in the app. Upload replaces signature + old stamp.</p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#E8ECF4] bg-white py-2 text-[12px] font-semibold text-slate-600 hover:border-brand hover:text-brand"
+        >
+          <Upload size={14} /> Upload stamp
+        </button>
+        <button
+          type="button"
+          disabled={!state.stampImage}
+          onClick={() => update('stampImage', null)}
+          className="inline-flex flex-1 items-center justify-center rounded-xl border border-[#E8ECF4] bg-white py-2 text-[12px] font-semibold text-slate-600 hover:border-brand hover:text-brand disabled:opacity-40"
+        >
+          Use default
+        </button>
+      </div>
     </div>
   );
 }

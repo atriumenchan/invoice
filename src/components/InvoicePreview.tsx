@@ -3,6 +3,7 @@ import { Calendar, Clock, Globe } from 'lucide-react';
 import type { InvoiceState } from '../types';
 import { amountInWords, computeTotals, fmt2 } from '../lib/calc';
 import { LOGO_DATA_URI } from '../assets/logo';
+import { DEFAULT_STAMP_SRC } from '../assets/stamp';
 
 /**
  * Invoice preview — markup is a 1:1 port of the original builder.
@@ -11,6 +12,8 @@ import { LOGO_DATA_URI } from '../assets/logo';
 const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ state: s }, ref) => {
   const { subtotal, discount, chargeRows, total } = computeTotals(s);
   const useSignImage = s.signMode === 'upload' && s.signImage;
+  const stampSrc = s.stampImage || DEFAULT_STAMP_SRC;
+  const showTypedSignature = s.showSignature && !s.showStamp;
   const sellerTaxLine = [
     s.showGstin ? `GSTIN: ${s.byGstin}` : '',
     s.showSac ? `SAC/HSN: ${s.bySac}` : '',
@@ -196,7 +199,7 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
         </div>
       )}
 
-      {(s.showWords || s.showSignature) && (
+      {(s.showWords || s.showStamp || showTypedSignature) && (
       <div className="words-sign">
         {s.showWords && (
           <div className="words-card">
@@ -204,23 +207,23 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
             <div className="amt">{amountInWords(total, s.currency)}</div>
           </div>
         )}
-        {s.showSignature && (
+        {(s.showStamp || showTypedSignature) && (
         <div className="sign-card">
           <div className="sig-block">
             {s.showStamp && (
-              <div
-                className="stamp"
+              <img
+                className="stamp stamp-img"
+                src={stampSrc}
+                alt=""
                 aria-hidden="true"
                 style={{
                   opacity: Math.max(0, Math.min(100, s.stampOpacity ?? 46)) / 100,
                   transform: `rotate(${s.stampRotate ?? 0}deg)`,
-                  fontSize: `${s.stampFontSize ?? 30}px`,
+                  width: `${Math.round((s.stampFontSize ?? 30) * 11)}px`,
                 }}
-              >
-                <div className="stamp-line1">For Betelgeuse Global</div>
-                <div className="stamp-line2">Accounts</div>
-              </div>
+              />
             )}
+            {showTypedSignature && (
             <div className="sig">
               {useSignImage ? (
                 <img
@@ -234,10 +237,13 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
                 </div>
               )}
             </div>
+            )}
           </div>
+          {showTypedSignature && (
           <div className="title">
             {useSignImage ? `${s.signName}  |  ${s.signTitle}` : s.signTitle}
           </div>
+          )}
         </div>
         )}
       </div>

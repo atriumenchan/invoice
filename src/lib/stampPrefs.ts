@@ -1,8 +1,5 @@
 import { supabase, supabaseConfigured } from './supabase';
 
-const STAMP_LAST_KEY = 'admexo-sign-style';
-const STAMP_LAST_KEY_OLD = 'admexo-stamp-last';
-
 export const DEFAULT_STAMP_OPACITY = 46;
 export const DEFAULT_STAMP_ROTATE = 0;
 export const DEFAULT_STAMP_FONT = 30;
@@ -41,27 +38,12 @@ export function normalizeSignStyle(raw: Partial<SignStyle> | null | undefined): 
   };
 }
 
-function readLocalRaw(): Partial<SignStyle> | null {
-  try {
-    const raw = localStorage.getItem(STAMP_LAST_KEY) ?? localStorage.getItem(STAMP_LAST_KEY_OLD);
-    if (!raw) return null;
-    return JSON.parse(raw) as Partial<SignStyle>;
-  } catch {
-    return null;
-  }
-}
-
 export function readStampLast(): SignStyle {
-  return normalizeSignStyle(readLocalRaw() ?? DEFAULT_SIGN_STYLE);
+  return { ...DEFAULT_SIGN_STYLE };
 }
 
-export function writeStampLast(prefs: SignStyle) {
-  try {
-    const next = normalizeSignStyle(prefs);
-    localStorage.setItem(STAMP_LAST_KEY, JSON.stringify(next));
-  } catch {
-    /* ignore quota / private mode */
-  }
+export function writeStampLast(_prefs: SignStyle) {
+  /* Sign style is stored in Supabase (sign-prefs) and on each invoice. */
 }
 
 async function authHeader(): Promise<string | null> {

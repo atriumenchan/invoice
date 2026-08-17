@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import type { EntityRegion, InvoiceState, LineItem } from '../types';
-import { readStampLast, writeStampLast } from '../lib/stampPrefs';
+import { DEFAULT_SIGN_STYLE, writeStampLast } from '../lib/stampPrefs';
+import type { InvoiceRow } from '../lib/db';
 
+/** @deprecated Invoice drafts are stored in Supabase, not the browser. Kept to clear leftover keys. */
 export const STORAGE_KEY = 'admexo-invoice-v2';
 
 /** e.g. 'AUG26' — used for placeholder numbers before cloud save */
@@ -41,7 +43,7 @@ const DEFAULT_STATE: InvoiceState = {
   showBank: true,
   showNotes: true,
   showWords: true,
-  showSignature: true,
+  showSignature: false,
   showStamp: true,
   stampOpacity: 46,
   stampRotate: 0,
@@ -94,6 +96,7 @@ const DEFAULT_STATE: InvoiceState = {
   signName: 'Rohan Thakur',
   signTitle: 'Authorized Signatory',
   signImage: null,
+  stampImage: null,
 
   footCompany: 'ADMEXO',
   footRegions: 'USA | DUBAI | INDIA | UK',
@@ -106,35 +109,27 @@ const ENTITY_PRESETS: Record<EntityRegion, Partial<InvoiceState>> = {
   US: { currency: 'USD', showGstin: false, showSac: false, charges: [] },
 };
 
-function loadInitial(): InvoiceState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return hydrateInvoiceState(JSON.parse(raw));
-  } catch {
-    /* ignore corrupt cache */
-  }
-  return hydrateInvoiceState(null);
+function newInvoiceState(): InvoiceState {
+  return hydrateInvoiceState(null, { applyStampDefaults: true });
 }
 
-/** Fill missing fields from defaults + last-used stamp/signature style. */
-export function hydrateInvoiceState(partial?: Partial<InvoiceState> | null): InvoiceState {
-  const last = readStampLast();
-  const next: InvoiceState = { ...DEFAULT_STATE, ...last, ...(partial ?? {}) };
-  writeStampLast({
-    stampOpacity: next.stampOpacity,
-    stampRotate: next.stampRotate,
-    stampFontSize: next.stampFontSize,
-    signFontSize: next.signFontSize,
-  });
-  return next;
+/** Fill missing fields from defaults. Stamp defaults apply only for brand-new invoices. */
+export function hydrateInvoiceState(
+  partial?: Partial<InvoiceState> | null,
+  opts?: { applyStampDefaults?: boolean }
+): InvoiceState {
+  const stamp = opts?.applyStampDefaults === false ? {} : DEFAULT_SIGN_STYLE;
+  return { ...DEFAULT_STATE, ...stamp, ...(partial ?? {}) };
 }
 
 export function useInvoice() {
-  const [state, setState] = useState<InvoiceState>(loadInitial);
+  const [state, setState] = useState<InvoiceState>(newInvoiceState);
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [downloading, setDownloading] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
 
   const update = useCallback(<K extends keyof InvoiceState>(key: K, value: InvoiceState[K]) => {
     setState((s) => {
@@ -217,22 +212,43 @@ export function useInvoice() {
     setDirty(true);
   }, []);
 
-  /* ---------- autosave ---------- */
-  const saveNow = useCallback(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      /* storage full / unavailable */
-    }
+  /* ---------- cloud hydrate ---------- */
+  const markClean = useCallback(() => {
     setDirty(false);
     setSavedAt(new Date());
-  }, [state]);
+  }, []);
 
-  useEffect(() => {
-    if (!dirty) return;
-    const t = setTimeout(saveNow, 800);
-    return () => clearTimeout(t);
-  }, [state, dirty, saveNow]);
+  const loadRemote = useCallback((row: InvoiceRow) => {
+    setState(hydrateInvoiceState(
+      {
+        ...row.state,
+        invoiceId: row.id,
+        invNo: row.invoice_no,
+        status: row.status as InvoiceState['status'],
+        createdByEmail: row.created_by_email,
+      },
+      { applyStampDefaults: false }
+    ));
+    setDirty(false);
+    setSavedAt(row.updated_at ? new Date(row.updated_at) : new Date());
+  }, []);
+
+  const applyRemoteIfClean = useCallback((row: InvoiceRow) => {
+    if (dirtyRef.current) return;
+    loadRemote(row);
+  }, [loadRemote]);
+
+  const resetToNew = useCallback(() => {
+    setState(newInvoiceState());
+    setDirty(false);
+    setSavedAt(null);
+  }, []);
+
+  const loadTemplate = useCallback((partial: Partial<InvoiceState>) => {
+    setState(hydrateInvoiceState({ ...partial, invoiceId: null, status: 'draft' }, { applyStampDefaults: false }));
+    setDirty(true);
+    setSavedAt(null);
+  }, []);
 
   /* ---------- PDF export (unchanged logic) ---------- */
   const downloadPDF = useCallback(async () => {
@@ -304,7 +320,11 @@ export function useInvoice() {
     notes: { add: addNote, remove: removeNote, update: updateNote },
     dirty,
     savedAt,
-    saveNow,
+    markClean,
+    loadRemote,
+    applyRemoteIfClean,
+    resetToNew,
+    loadTemplate,
     downloading,
     previewRef,
     downloadPDF,
