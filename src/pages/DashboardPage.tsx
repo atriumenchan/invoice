@@ -5,6 +5,7 @@ import {
   Check,
   Clock,
   Copy,
+  Download,
   FilePlus2,
   FileText,
   LayoutTemplate,
@@ -202,7 +203,7 @@ export default function DashboardPage() {
         currentEmail: session?.user.email,
       })
     ) {
-      alert('You can only delete your own draft or sent-back invoices. Approved invoices stay in the system.');
+      alert('You can only delete invoices you created.');
       return;
     }
     if (!window.confirm(`Delete invoice ${row.invoice_no}? This cannot be undone.`)) return;
@@ -222,11 +223,21 @@ export default function DashboardPage() {
       status: row.status as InvoiceStatus,
       ownerEmail: row.created_by_email,
       currentEmail: session?.user.email,
+      invoiceId: row.id,
     };
     return (
     <div
       key={row.id}
-      className="flex items-center gap-3 rounded-2xl border border-[#E8ECF4] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)]"
+      role="button"
+      tabIndex={0}
+      onClick={() => openInvoice(row)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openInvoice(row);
+        }
+      }}
+      className="flex cursor-pointer items-center gap-3 rounded-2xl border border-[#E8ECF4] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(16,24,40,0.08)]"
     >
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
         <FileText size={16} />
@@ -253,11 +264,12 @@ export default function DashboardPage() {
         {row.currency}{' '}
         {Number(row.total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </span>
+      <div className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
       {isAdmin && invoiceCanBeModerated(row) && (
         <>
           <button
             type="button"
-            title="Approve the saved cloud copy. Open the invoice first if you need to change it, then use Save & approve."
+            title="Approve"
             onClick={() => moderate(row, 'approved')}
             className="icon-btn bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
           >
@@ -265,7 +277,7 @@ export default function DashboardPage() {
           </button>
           <button
             type="button"
-            title="Reject"
+            title="Send back"
             onClick={() => moderate(row, 'rejected')}
             className="icon-btn bg-rose-50 text-rose-500 hover:bg-rose-100"
           >
@@ -278,8 +290,11 @@ export default function DashboardPage() {
           <Pencil size={14} />
         </button>
       )}
-      <button type="button" title="Review / edit" onClick={() => openInvoice(row)} className="icon-btn">
+      <button type="button" title="Open" onClick={() => openInvoice(row)} className="icon-btn">
         <FileText size={14} />
+      </button>
+      <button type="button" title="Download PDF" onClick={() => openInvoice(row)} className="icon-btn">
+        <Download size={14} />
       </button>
       <button type="button" title="Email invoice" onClick={() => emailInvoice(row)} className="icon-btn">
         <Mail size={14} />
@@ -294,6 +309,7 @@ export default function DashboardPage() {
           <Trash2 size={14} />
         </button>
       )}
+      </div>
     </div>
     );
   };

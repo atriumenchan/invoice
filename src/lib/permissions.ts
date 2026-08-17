@@ -11,20 +11,21 @@ export interface AccessCtx {
   status: InvoiceStatus;
   ownerEmail: string | null | undefined;
   currentEmail: string | null | undefined;
+  invoiceId?: string | null;
 }
 
 function isOwner(ctx: AccessCtx): boolean {
-  const owner = (ctx.ownerEmail || '').toLowerCase();
   const me = (ctx.currentEmail || '').toLowerCase();
-  if (!owner || !me) return false;
-  return owner === me;
+  if (!me) return false;
+  if (!ctx.invoiceId) return true;
+  const owner = (ctx.ownerEmail || '').toLowerCase();
+  return Boolean(owner) && owner === me;
 }
 
-/** Admin and the invoice creator can both edit. Voided invoices stay locked. */
+/** Creator and admin can always edit. Only void is locked. */
 export function canEditInvoiceContent(ctx: AccessCtx): boolean {
   if (ctx.status === 'void') return false;
-  if (ctx.isAdmin) return true;
-  return isOwner(ctx);
+  return ctx.isAdmin || isOwner(ctx);
 }
 
 export function canChangeInvoiceNumber(ctx: AccessCtx): boolean {
@@ -33,11 +34,10 @@ export function canChangeInvoiceNumber(ctx: AccessCtx): boolean {
 
 export function canSubmitForApproval(ctx: AccessCtx): boolean {
   if (ctx.isAdmin) return false;
-  if (!isOwner(ctx)) return false;
+  if (!canEditInvoiceContent(ctx)) return false;
   return ctx.status === 'draft' || ctx.status === 'rejected';
 }
 
-/** Admin saving a team invoice that still needs a decision. */
 export function canSaveAndApprove(ctx: AccessCtx): boolean {
   if (!ctx.isAdmin) return false;
   if (isAdminEmail(ctx.ownerEmail)) return false;
@@ -48,20 +48,18 @@ export function canRejectInvoice(ctx: AccessCtx): boolean {
   return canSaveAndApprove(ctx);
 }
 
+/** If you can see the invoice, you can download the PDF. */
 export function canDownloadPdf(ctx: AccessCtx): boolean {
-  if (ctx.isAdmin) return true;
-  return ctx.status === 'approved';
+  return ctx.status !== 'void';
 }
 
 export function canDeleteInvoice(ctx: AccessCtx): boolean {
-  if (ctx.isAdmin) return true;
-  if (!isOwner(ctx)) return false;
-  return ctx.status === 'draft' || ctx.status === 'rejected';
+  if (ctx.status === 'void') return false;
+  return ctx.isAdmin || isOwner(ctx);
 }
 
 export function lockReason(ctx: AccessCtx): string | null {
   if (canEditInvoiceContent(ctx)) return null;
-  if (ctx.status === 'void') return 'This invoice is voided and cannot be edited.';
-  if (!isOwner(ctx) && !ctx.isAdmin) return 'You can only edit invoices you created.';
-  return 'This invoice is locked.';
+  if (ctx.status === 'void') return 'This invoice is voided.';
+  return 'Only the person who created this invoice (or admin) can edit it.';
 }

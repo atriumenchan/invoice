@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { Session } from '@supabase/supabase-js';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { STORAGE_KEY } from './useInvoice';
+import { isAdminEmail } from '../lib/permissions';
 
 function clearLegacyInvoiceCache() {
   try {
@@ -50,17 +51,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsAdmin(false);
       return;
     }
+    setIsAdmin(isAdminEmail(session.user.email));
     let cancelled = false;
-    // Source of truth is the database (public.is_admin()), same check the
-    // RLS policies use — this avoids drift with a client-side env var.
-    supabase.rpc('is_admin').then(({ data, error }) => {
+    supabase.rpc('is_admin').then(({ data }) => {
       if (cancelled) return;
-      if (error) {
-        const adminEmail = ((import.meta.env.VITE_ADMIN_EMAIL as string) ?? '').toLowerCase();
-        setIsAdmin(!!adminEmail && (session.user.email ?? '').toLowerCase() === adminEmail);
-        return;
-      }
-      setIsAdmin(!!data);
+      setIsAdmin(isAdminEmail(session.user.email) || !!data);
     });
     return () => {
       cancelled = true;

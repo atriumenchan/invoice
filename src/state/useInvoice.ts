@@ -234,7 +234,14 @@ export function useInvoice() {
   }, []);
 
   const applyRemoteIfClean = useCallback((row: InvoiceRow) => {
-    if (dirtyRef.current) return;
+    if (dirtyRef.current) {
+      setState((s) => ({
+        ...s,
+        status: (row.status as InvoiceState['status']) ?? s.status,
+        createdByEmail: s.createdByEmail || row.created_by_email,
+      }));
+      return;
+    }
     loadRemote(row);
   }, [loadRemote]);
 

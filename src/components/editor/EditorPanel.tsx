@@ -38,7 +38,6 @@ import {
   saveInvoiceToCloud,
   saveTemplate,
   nextInvoiceNumber,
-  assertInvoiceNumberFree,
   InvoiceNumberTakenError,
   notifyApprovalSubmitted,
   type BankRow,
@@ -87,6 +86,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     status: state.status,
     ownerEmail: state.createdByEmail,
     currentEmail: session?.user.email,
+    invoiceId: state.invoiceId,
   };
   const canEdit = canEditInvoiceContent(access);
   const canNumber = canChangeInvoiceNumber(access);
@@ -129,12 +129,19 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
 
   const onDownload = async () => {
     try {
-      await assertInvoiceNumberFree(state.invNo, state.invoiceId, { strict: true });
       await downloadPDF();
     } catch (e) {
-      if (!handleNumberError(e)) alert((e as Error).message);
+      alert((e as Error).message);
     }
   };
+
+  useEffect(() => {
+    if (!session) return;
+    if (state.invoiceId) return;
+    if (!state.createdByEmail && session.user.email) {
+      updateSilent('createdByEmail', session.user.email);
+    }
+  }, [session, state.invoiceId, state.createdByEmail, updateSilent]);
 
   useEffect(() => {
     if (!session) return;
@@ -801,11 +808,10 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           type="button"
           onClick={onDownload}
           disabled={downloading || !canDownload}
-          title={canDownload ? undefined : 'Waiting for admin approval'}
           className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-deep to-brand py-3 text-[14px] font-bold text-white shadow-lg shadow-brand/25 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-brand/30 active:translate-y-0 active:scale-[0.99] disabled:cursor-wait disabled:opacity-60 disabled:hover:translate-y-0"
         >
           <Download size={16} />
-          {downloading ? 'Generating…' : canDownload ? 'Download PDF' : 'Awaiting approval'}
+          {downloading ? 'Generating…' : 'Download PDF'}
         </button>
         <p className="mt-2 text-center text-[11px] text-slate-400">
           Ctrl+S save · Ctrl+Enter download

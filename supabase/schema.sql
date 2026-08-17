@@ -438,9 +438,9 @@ create policy "invoices update" on public.invoices
   with check (auth.uid() = user_id or public.is_admin());
 
 -- Who may change what:
---   admin  — edit any invoice; approve / reject; own invoices are auto-approved
---   member — create/edit own draft or rejected invoices; send for approval;
---            cannot edit pending or approved invoices (admin's copy is canonical)
+--   admin  — edit any invoice; approve / reject
+--   member — always edit their own invoice (draft, pending, or approved);
+--            cannot approve or reject; void stays locked
 create or replace function public.enforce_invoice_edit_rules()
 returns trigger
 language plpgsql
@@ -457,17 +457,12 @@ begin
     raise exception 'You can only update invoices you created';
   end if;
 
-  if old.status in ('approved', 'void') then
-    raise exception 'This invoice is locked after approval';
+  if old.status = 'void' then
+    raise exception 'This invoice is voided and cannot be edited';
   end if;
 
-  if old.status = 'pending' then
-    raise exception 'This invoice is waiting for admin review and cannot be edited';
-  end if;
-
-  -- members may keep draft/rejected or submit (pending). Never approve.
-  if new.status not in ('draft', 'pending', 'rejected') then
-    raise exception 'Only admin can set this invoice status';
+  if new.status = 'approved' and old.status is distinct from 'approved' then
+    raise exception 'Only admin can approve invoices';
   end if;
 
   if new.status = 'rejected' and old.status is distinct from 'rejected' then
