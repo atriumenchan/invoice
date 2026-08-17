@@ -285,22 +285,67 @@ export type SaveInvoiceOpts = {
   submit?: boolean;
   approve?: boolean;
   reject?: boolean;
+  asAdmin?: boolean;
 };
 
-function resolveSaveStatus(s: InvoiceState, saverEmail: string, opts?: SaveInvoiceOpts): InvoiceStatus {
+const FINGERPRINT_SKIP = new Set(['status', 'invoiceId', 'createdByEmail']);
+
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value && typeof value === 'object') {
+    const o = value as Record<string, unknown>;
+    return Object.keys(o)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = stableValue(o[key]);
+        return acc;
+      }, {});
+  }
+  return value;
+}
+
+/** Compare invoice body only — status changes must not count as an edit. */
+export function invoiceContentFingerprint(s: Partial<InvoiceState> | null | undefined): string {
+  if (!s) return '';
+  const body: Record<string, unknown> = {};
+  for (const key of Object.keys(s).sort()) {
+    if (FINGERPRINT_SKIP.has(key)) continue;
+    body[key] = stableValue((s as Record<string, unknown>)[key]);
+  }
+  return JSON.stringify(body);
+}
+
+function saverIsAdmin(saverEmail: string, opts?: SaveInvoiceOpts): boolean {
+  return isAdminEmail(saverEmail) || Boolean(opts?.asAdmin);
+}
+
+/**
+ * Admin save keeps the current workflow status (approved stays approved).
+ * Owner save of an approved invoice becomes draft only when the body changed,
+ * so download turns off and Send for approval comes back.
+ */
+function statusAfterSave(args: {
+  live: InvoiceStatus | null;
+  local: InvoiceStatus;
+  hasId: boolean;
+  ownerEmail: string | null;
+  saverEmail: string;
+  opts?: SaveInvoiceOpts;
+  contentChanged: boolean;
+}): InvoiceStatus {
+  const { live, local, hasId, ownerEmail, saverEmail, opts, contentChanged } = args;
   if (opts?.approve) return 'approved';
   if (opts?.reject) return 'rejected';
   if (opts?.submit) return 'pending';
-  if (!isAdminEmail(saverEmail)) {
-    if (s.status === 'pending') return 'pending';
-    if (s.status === 'rejected') return 'rejected';
-    if (s.status === 'approved') return 'approved';
-    return 'draft';
+  if (saverIsAdmin(saverEmail, opts)) {
+    if (!hasId) return 'approved';
+    if (isAdminEmail(ownerEmail || saverEmail)) return 'approved';
+    return live ?? local;
   }
-  if (!s.invoiceId) return 'approved';
-  const owner = (s.createdByEmail || saverEmail).toLowerCase();
-  if (isAdminEmail(owner)) return 'approved';
-  return s.status;
+  if (live === 'approved') return contentChanged ? 'draft' : 'approved';
+  if (live === 'pending' || live === 'rejected' || live === 'void') return live;
+  if (local === 'pending' || local === 'rejected' || local === 'approved') return local;
+  return 'draft';
 }
 
 export function rowToInvoiceState(row: InvoiceRow): InvoiceState {
@@ -328,15 +373,22 @@ export async function saveInvoiceToCloud(
   const t = computeTotals(s);
   const approving = Boolean(opts?.approve);
   const rejecting = Boolean(opts?.reject);
-  let status = resolveSaveStatus(s, saverEmail, opts);
-  if (s.invoiceId && (approving || rejecting)) {
-    const live = await getInvoiceStatus(s.invoiceId);
-    if (live) status = live as InvoiceStatus;
-  } else if (s.invoiceId && !opts?.submit) {
-    const live = await getInvoiceStatus(s.invoiceId);
-    if (live === 'approved' || live === 'pending' || live === 'rejected' || live === 'void') {
-      status = live;
-    }
+  const existing = s.invoiceId ? await getInvoice(s.invoiceId) : null;
+  const live = (existing?.status as InvoiceStatus | undefined) ?? null;
+  const contentChanged = Boolean(
+    existing && invoiceContentFingerprint(s) !== invoiceContentFingerprint(existing.state)
+  );
+  let status = statusAfterSave({
+    live,
+    local: s.status,
+    hasId: Boolean(s.invoiceId),
+    ownerEmail: s.createdByEmail,
+    saverEmail,
+    opts,
+    contentChanged,
+  });
+  if (s.invoiceId && (approving || rejecting) && live) {
+    status = live;
   }
 
   let invoice_no: string;

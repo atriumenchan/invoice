@@ -48,7 +48,7 @@ export function canRejectInvoice(ctx: AccessCtx): boolean {
   return canSaveAndApprove(ctx);
 }
 
-/** Team can download only after approval. Admin can always download. */
+/** Team can download only while the invoice is approved. */
 export function canDownloadPdf(ctx: AccessCtx): boolean {
   if (ctx.status === 'void') return false;
   if (ctx.isAdmin) return true;

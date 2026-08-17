@@ -438,13 +438,16 @@ create policy "invoices update" on public.invoices
   with check (auth.uid() = user_id or public.is_admin());
 
 -- Who may change what:
---   admin  — edit any invoice; approve / reject
---   member — always edit their own invoice (draft, pending, or approved);
---            cannot approve or reject; void stays locked
+--   admin  — edit any invoice; approve / reject; approved stays approved when admin saves
+--   member — edit own invoices; if they change an approved invoice body it becomes draft
+--            (download off until they send for approval and admin approves again)
 create or replace function public.enforce_invoice_edit_rules()
 returns trigger
 language plpgsql
 as $$
+declare
+  old_body jsonb;
+  new_body jsonb;
 begin
   new.user_id := old.user_id;
   new.created_by_email := old.created_by_email;
@@ -464,15 +467,25 @@ begin
     raise exception 'This invoice is voided and cannot be edited';
   end if;
 
-  -- creator autosave must not undo an approval
-  if old.status = 'approved' then
-    new.status := 'approved';
-  elsif new.status = 'approved' then
+  if new.status = 'approved' and old.status is distinct from 'approved' then
     raise exception 'Only admin can approve invoices';
   end if;
 
   if new.status = 'rejected' and old.status is distinct from 'rejected' then
     raise exception 'Only admin can reject invoices';
+  end if;
+
+  old_body := case when jsonb_typeof(old.state) = 'object' then old.state - 'status' else '{}'::jsonb end;
+  new_body := case when jsonb_typeof(new.state) = 'object' then new.state - 'status' else '{}'::jsonb end;
+
+  if old.status = 'approved' then
+    if new.status = 'pending' then
+      null;
+    elsif old_body is distinct from new_body then
+      new.status := 'draft';
+    else
+      new.status := 'approved';
+    end if;
   end if;
 
   if jsonb_typeof(new.state) = 'object' then

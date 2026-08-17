@@ -230,7 +230,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       const s = stateRef.current;
       if (contentKey(s) === baselineRef.current) return;
       try {
-        const saved = await saveInvoiceToCloud(s);
+        const saved = await saveInvoiceToCloud(s, { asAdmin: isAdmin });
         applySaved(s, saved, session.user.email);
       } catch (e) {
         console.error('Auto-save failed', e);
@@ -238,7 +238,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     }, 1500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, dirty, canEdit, state]);
+  }, [session, dirty, canEdit, state, isAdmin]);
 
   const flash = (msg: string) => {
     setCloudMsg(msg);
@@ -338,7 +338,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     if (!canEdit && !opts?.approve && !opts?.reject) return;
     setCloudBusy(true);
     try {
-      const saved = await saveInvoiceToCloud(state, opts);
+      const saved = await saveInvoiceToCloud(state, { ...opts, asAdmin: isAdmin });
       applySaved(state, saved, session.user.email);
       if (opts?.approve) flash(`Saved and approved as ${saved.invoice_no}`);
       else if (opts?.reject) flash('Sent back — the creator can edit and resubmit');
@@ -351,6 +351,8 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           client: state.toName || 'No client',
           total: `${state.currency} ${fmt2(t.total)}`,
         }).catch((err) => console.error('WhatsApp notify failed', err));
+      } else if (saved.status === 'draft' && state.status === 'approved') {
+        flash('Saved as draft — send for approval again before it can be downloaded');
       } else flash(`Saved ${saved.invoice_no} — everyone will see this version`);
     } catch (e) {
       if (opts?.approve && e instanceof InvoiceNumberTakenError && state.invoiceId) {
