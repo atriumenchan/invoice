@@ -609,3 +609,57 @@ export async function deleteTemplate(id: string): Promise<void> {
   const { error } = await supabase.from('templates').delete().eq('id', id);
   if (error) throw error;
 }
+
+export interface TemplateShareRow {
+  id: string;
+  template_id: string;
+  template_name: string;
+  from_email: string;
+  to_email: string;
+  status: 'pending' | 'accepted' | 'declined';
+  created_at: string;
+}
+
+export async function listIncomingTemplateShares(): Promise<TemplateShareRow[]> {
+  const { data: auth } = await supabase.auth.getUser();
+  const email = (auth.user?.email || '').toLowerCase();
+  if (!email) return [];
+  const { data, error } = await supabase
+    .from('template_shares')
+    .select('id, template_id, template_name, from_email, to_email, status, created_at')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as TemplateShareRow[]).filter((row) => row.to_email.toLowerCase() === email);
+}
+
+export async function shareTemplate(template: TemplateRow, toEmail: string): Promise<void> {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error('Not signed in');
+  const from = (auth.user.email || '').trim();
+  const to = toEmail.trim().toLowerCase();
+  if (!to || !to.includes('@')) throw new Error('Enter a valid email to share with.');
+  if (to === from.toLowerCase()) throw new Error('You already have this template.');
+  const { error } = await supabase.from('template_shares').insert({
+    template_id: template.id,
+    template_name: template.name,
+    from_user_id: auth.user.id,
+    from_email: from,
+    to_email: to,
+    status: 'pending',
+  });
+  if (error) {
+    if (error.code === '23505') throw new Error('That person already has a pending invite for this template.');
+    throw error;
+  }
+}
+
+export async function acceptTemplateShare(shareId: string): Promise<void> {
+  const { error } = await supabase.rpc('accept_template_share', { p_share_id: shareId });
+  if (error) throw error;
+}
+
+export async function declineTemplateShare(shareId: string): Promise<void> {
+  const { error } = await supabase.from('template_shares').update({ status: 'declined' }).eq('id', shareId);
+  if (error) throw error;
+}

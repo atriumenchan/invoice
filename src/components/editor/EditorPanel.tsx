@@ -95,9 +95,10 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   };
   const canEdit = canEditInvoiceContent(access);
   const canNumber = canChangeInvoiceNumber(access);
-  const canDownload = canDownloadPdf(access);
-  const lockedMsg = lockReason(access);
   const ownerDisclaimer = ownerApprovedEditDisclaimer(access);
+  const needsReapproval = Boolean(ownerDisclaimer && dirty);
+  const canDownload = canDownloadPdf(access) && !needsReapproval;
+  const lockedMsg = lockReason(access);
   const isAdminOwn = isAdminEmail(state.createdByEmail) || (!state.createdByEmail && isAdmin);
   const [issuers, setIssuers] = useState<IssuerRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
@@ -469,7 +470,11 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-800">{lockedMsg}</p>
         )}
         {ownerDisclaimer && (
-          <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-800">{ownerDisclaimer}</p>
+          <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-800">
+            {needsReapproval
+              ? 'Download is off. Send this invoice for approval again before anyone on the team can download it.'
+              : ownerDisclaimer}
+          </p>
         )}
         {isAdmin && state.invoiceId && !isAdminOwn && (
           <p className="mb-3 rounded-xl bg-slate-50 px-3 py-2 text-[12px] font-medium text-slate-600">
@@ -759,25 +764,29 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             <div
               className={
                 'rounded-2xl px-3 py-2.5 ' +
-                (state.status === 'approved'
-                  ? 'bg-emerald-50'
-                  : state.status === 'pending'
-                    ? 'bg-blue-50'
-                    : state.status === 'rejected'
-                      ? 'bg-rose-50'
-                      : 'bg-slate-50')
+                (needsReapproval || state.status === 'draft'
+                  ? 'bg-slate-50'
+                  : state.status === 'approved'
+                    ? 'bg-emerald-50'
+                    : state.status === 'pending'
+                      ? 'bg-blue-50'
+                      : state.status === 'rejected'
+                        ? 'bg-rose-50'
+                        : 'bg-slate-50')
               }
             >
               <p
                 className={
                   'text-[10px] font-semibold uppercase tracking-[0.14em] ' +
-                  (state.status === 'approved'
-                    ? 'text-emerald-500'
-                    : state.status === 'pending'
-                      ? 'text-blue-500'
-                      : state.status === 'rejected'
-                        ? 'text-rose-400'
-                        : 'text-slate-400')
+                  (needsReapproval
+                    ? 'text-amber-500'
+                    : state.status === 'approved'
+                      ? 'text-emerald-500'
+                      : state.status === 'pending'
+                        ? 'text-blue-500'
+                        : state.status === 'rejected'
+                          ? 'text-rose-400'
+                          : 'text-slate-400')
                 }
               >
                 Status
@@ -785,22 +794,26 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               <p
                 className={
                   'mt-1 text-[13px] font-bold leading-tight ' +
-                  (state.status === 'approved'
-                    ? 'text-emerald-700'
-                    : state.status === 'pending'
-                      ? 'text-blue-700'
-                      : state.status === 'rejected'
-                        ? 'text-rose-700'
-                        : 'text-slate-600')
+                  (needsReapproval
+                    ? 'text-amber-800'
+                    : state.status === 'approved'
+                      ? 'text-emerald-700'
+                      : state.status === 'pending'
+                        ? 'text-blue-700'
+                        : state.status === 'rejected'
+                          ? 'text-rose-700'
+                          : 'text-slate-600')
                 }
               >
-                {state.status === 'approved'
-                  ? 'Approved'
-                  : state.status === 'rejected'
-                    ? 'Sent back'
-                    : state.status === 'pending'
-                      ? 'Waiting for approval'
-                      : 'Draft'}
+                {needsReapproval
+                  ? 'Needs approval again'
+                  : state.status === 'approved'
+                    ? 'Approved'
+                    : state.status === 'rejected'
+                      ? 'Sent back'
+                      : state.status === 'pending'
+                        ? 'Waiting for approval'
+                        : 'Draft'}
               </p>
             </div>
           ) : (
@@ -847,7 +860,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               <span className="icon-tip">{cloudBusy ? 'Saving…' : 'Save'}</span>
             </button>
           )}
-          {session && canSubmitForApproval(access) && (
+          {session && (canSubmitForApproval(access) || needsReapproval) && (
             <button
               type="button"
               onClick={sendForApproval}

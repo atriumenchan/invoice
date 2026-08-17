@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
+  Bell,
   Check,
   Clock,
   Copy,
@@ -13,6 +14,7 @@ import {
   LogOut,
   Mail,
   Pencil,
+  Share2,
   Trash2,
   UserPlus,
   Users,
@@ -30,6 +32,10 @@ import {
   isAdminEmail,
   listInvoices,
   listTemplates,
+  listIncomingTemplateShares,
+  shareTemplate,
+  acceptTemplateShare,
+  declineTemplateShare,
   renameInvoice,
   renameTemplate,
   setInvoiceStatus,
@@ -37,6 +43,7 @@ import {
   InvoiceNumberTakenError,
   type InvoiceRow,
   type TemplateRow,
+  type TemplateShareRow,
 } from '../lib/db';
 import { cn } from '../lib/utils';
 import type { InvoiceStatus } from '../types';
@@ -61,7 +68,7 @@ interface ManagedUser {
   last_sign_in_at: string | null;
 }
 
-type Tab = 'invoices' | 'approvals' | 'mine' | 'templates' | 'users';
+type Tab = 'invoices' | 'approvals' | 'mine' | 'templates' | 'notifications' | 'users';
 
 export default function DashboardPage() {
   const { session, isAdmin, signOut } = useAuth();
@@ -69,6 +76,7 @@ export default function DashboardPage() {
   const [tab, setTab] = useState<Tab>('invoices');
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
+  const [templateShares, setTemplateShares] = useState<TemplateShareRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | InvoiceStatus>('all');
@@ -120,6 +128,11 @@ export default function DashboardPage() {
     try {
       setInvoices(await listInvoices());
       setTemplates(await listTemplates());
+      try {
+        setTemplateShares(await listIncomingTemplateShares());
+      } catch {
+        setTemplateShares([]);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -221,6 +234,36 @@ export default function DashboardPage() {
     if (!window.confirm(`Delete template “${row.name}”?`)) return;
     await deleteTemplate(row.id);
     load();
+  };
+
+  const shareTemplateRow = async (row: TemplateRow) => {
+    const email = window.prompt('Share this template with (email):', '');
+    if (!email) return;
+    try {
+      await shareTemplate(row, email);
+      alert(`Invite sent to ${email.trim()}. It appears under their Notifications until they accept.`);
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  };
+
+  const acceptShare = async (share: TemplateShareRow) => {
+    try {
+      await acceptTemplateShare(share.id);
+      await load();
+      setTab('templates');
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  };
+
+  const declineShare = async (share: TemplateShareRow) => {
+    try {
+      await declineTemplateShare(share.id);
+      await load();
+    } catch (e) {
+      alert((e as Error).message);
+    }
   };
 
   const renderInvoiceCard = (row: InvoiceRow) => {
@@ -362,6 +405,7 @@ export default function DashboardPage() {
               'invoices',
               ...(isAdmin ? (['approvals', 'mine'] as const) : []),
               'templates',
+              'notifications',
               ...(isAdmin ? (['users'] as const) : []),
             ] as const
           ).map((t) => (
@@ -378,6 +422,11 @@ export default function DashboardPage() {
               {t === 'approvals' && pendingInvoices.length > 0 && (
                 <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10.5px] font-bold text-white">
                   {pendingInvoices.length}
+                </span>
+              )}
+              {t === 'notifications' && templateShares.length > 0 && (
+                <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand px-1 text-[10.5px] font-bold text-white">
+                  {templateShares.length}
                 </span>
               )}
             </button>
@@ -473,6 +522,49 @@ export default function DashboardPage() {
               )}
             </div>
           )
+        ) : tab === 'notifications' ? (
+          templateShares.length === 0 ? (
+            <EmptyState
+              icon={<Bell size={20} />}
+              title="No notifications"
+              desc="When someone shares a template with you, accept it here. It then appears under Templates."
+            />
+          ) : (
+            <div className="space-y-2.5">
+              {templateShares.map((share) => (
+                <div
+                  key={share.id}
+                  className="flex items-center gap-3 rounded-2xl border border-[#E8ECF4] bg-white px-4 py-3.5"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+                    <Share2 size={16} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-semibold text-slate-900">{share.template_name}</p>
+                    <p className="truncate text-[12px] text-slate-500">
+                      {share.from_email} wants to share this template with you
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    title="Decline"
+                    onClick={() => declineShare(share)}
+                    className="icon-btn hover:bg-rose-50 hover:text-rose-500"
+                  >
+                    <X size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    title="Accept — add to my templates"
+                    onClick={() => acceptShare(share)}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-emerald-700"
+                  >
+                    <Check size={14} /> Accept
+                  </button>
+                </div>
+              ))}
+            </div>
+          )
         ) : templates.length === 0 ? (
           <EmptyState
             icon={<LayoutTemplate size={20} />}
@@ -495,6 +587,14 @@ export default function DashboardPage() {
                     {row.state?.byName || ''} · {new Date(row.created_at).toLocaleDateString()}
                   </p>
                 </div>
+                <button
+                  type="button"
+                  title="Share with a teammate"
+                  onClick={() => shareTemplateRow(row)}
+                  className="icon-btn"
+                >
+                  <Share2 size={14} />
+                </button>
                 <button
                   type="button"
                   title="Clone as new invoice"
