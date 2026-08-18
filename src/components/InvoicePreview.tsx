@@ -14,7 +14,10 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
   const useSignImage = s.signMode === 'upload' && s.signImage;
   const stampSrc = s.stampImage || DEFAULT_STAMP_SRC;
   const showTypedSignature = s.showSignature && !s.showStamp;
-  const sellerTaxLine = [s.showGstin ? `GSTIN: ${s.byGstin}` : ''].filter(Boolean);
+  const sellerTaxLine = [
+    s.showGstin ? `GSTIN: ${s.byGstin}` : '',
+    s.showSac ? `SAC/HSN: ${s.bySac}` : '',
+  ].filter(Boolean);
   const descWidth = 100 - 6 - 13 - 19 - (s.showQty ? 12 : 0);
 
   return (
@@ -99,7 +102,6 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
           <p>{s.toEmail}</p>
           <p style={{ whiteSpace: 'pre-line' }}>{s.toAddress}</p>
           {s.showGstin && <p className="gst">GSTIN: {s.toGstin}</p>}
-          {s.showSac && <p className="gst">SAC/HSN: {s.bySac}</p>}
           {s.toCustom.map(
             (f) =>
               (f.label || f.value) && (

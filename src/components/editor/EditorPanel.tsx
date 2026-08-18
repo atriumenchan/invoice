@@ -535,10 +535,20 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             <div>
               <div className="mb-1.5 flex items-center justify-between">
                 <span className="text-[12.5px] font-medium text-slate-500">Tax fields</span>
-                <EyeChip label="GSTIN" on={state.showGstin} onToggle={(v) => update('showGstin', v)} />
+                <div className="flex gap-1.5">
+                  <EyeChip label="GSTIN" on={state.showGstin} onToggle={(v) => update('showGstin', v)} />
+                  <EyeChip label="SAC/HSN" on={state.showSac} onToggle={(v) => update('showSac', v)} />
+                </div>
               </div>
-              {state.showGstin && (
-                <Field label="GSTIN" value={state.byGstin} onChange={(e) => update('byGstin', e.target.value)} />
+              {(state.showGstin || state.showSac) && (
+                <div className="grid grid-cols-2 gap-2.5">
+                  {state.showGstin && (
+                    <Field label="GSTIN" value={state.byGstin} onChange={(e) => update('byGstin', e.target.value)} />
+                  )}
+                  {state.showSac && (
+                    <Field label="SAC/HSN" value={state.bySac} onChange={(e) => update('bySac', e.target.value)} />
+                  )}
+                </div>
               )}
             </div>
             <CustomFields fields={state.byCustom} onChange={(f) => update('byCustom', f)} />
@@ -574,16 +584,10 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             <TextArea label="Address" value={state.toAddress} onChange={(e) => update('toAddress', e.target.value)} />
             <div className="flex items-center justify-between">
               <span className="text-[12.5px] font-medium text-slate-500">Tax ID</span>
-              <div className="flex gap-1.5">
-                <EyeChip label="GSTIN" on={state.showGstin} onToggle={(v) => update('showGstin', v)} />
-                <EyeChip label="SAC/HSN" on={state.showSac} onToggle={(v) => update('showSac', v)} />
-              </div>
+              <EyeChip label="GSTIN" on={state.showGstin} onToggle={(v) => update('showGstin', v)} />
             </div>
             {state.showGstin && (
               <Field label="GSTIN" value={state.toGstin} onChange={(e) => update('toGstin', e.target.value)} />
-            )}
-            {state.showSac && (
-              <Field label="SAC/HSN" value={state.bySac} onChange={(e) => update('bySac', e.target.value)} />
             )}
             <CustomFields fields={state.toCustom} onChange={(f) => update('toCustom', f)} />
           </SectionCard>
