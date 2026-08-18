@@ -116,11 +116,19 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
       <table className="items">
         <thead>
           <tr>
-            <th style={{ width: '6%' }}>NO.</th>
+            <th className="num-col" style={{ width: '6%' }}>NO.</th>
             <th style={{ width: `${descWidth}%` }}>SERVICE DESCRIPTION</th>
-            {s.showQty && <th style={{ width: '12%' }}>QTY</th>}
-            <th style={{ width: '13%' }} className="right">RATE</th>
-            <th style={{ width: '19%' }} className="right">AMOUNT</th>
+            {s.showQty && (
+              <th className="right" style={{ width: '12%' }}>
+                QTY
+              </th>
+            )}
+            <th style={{ width: '13%' }} className="right">
+              RATE
+            </th>
+            <th style={{ width: '19%' }} className="right">
+              AMOUNT
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -133,7 +141,7 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
                   <div className="desc">{item.desc}</div>
                   {item.period && <div className="period">{item.period}</div>}
                 </td>
-                {s.showQty && <td>{item.qty}</td>}
+                {s.showQty && <td className="right">{item.qty}</td>}
                 <td className="right">{fmt2(item.rate)}</td>
                 <td className="right">{fmt2(amt)}</td>
               </tr>

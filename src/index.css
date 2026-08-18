@@ -286,17 +286,25 @@ body {
   letter-spacing: 0.04em;
   font-weight: 700;
 }
-#invoice table.items thead th.right {
-  text-align: right;
-}
-#invoice table.items td {
-  padding: 12px;
-  border-bottom: 1px solid var(--line);
-  vertical-align: top;
-}
+#invoice table.items thead th.num-col,
 #invoice table.items td.num-col {
   width: 34px;
+  text-align: left;
+}
+#invoice table.items td.num-col {
   color: var(--muted);
+}
+#invoice table.items thead th.right,
+#invoice table.items td.right {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+#invoice table.items td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  text-align: left;
 }
 #invoice table.items td .desc {
   font-weight: 700;
@@ -307,10 +315,6 @@ body {
   font-size: 10.5px;
   margin-top: 2px;
   white-space: pre-line;
-}
-#invoice table.items td.right {
-  text-align: right;
-  white-space: nowrap;
 }
 #invoice .items-note {
   margin: 6px 40px 0 40px;
