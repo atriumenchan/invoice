@@ -9,19 +9,18 @@ import { Field, TextArea } from './Field';
 
 interface Props {
   items: LineItem[];
-  showSac: boolean;
   showQty: boolean;
   currency: string;
   ops: InvoiceApi['items'];
 }
 
-export function LineItemsSection({ items, showSac, showQty, currency, ops }: Props) {
+export function LineItemsSection({ items, showQty, currency, ops }: Props) {
   return (
     <div>
       <Reorder.Group axis="y" values={items} onReorder={ops.reorder} className="space-y-2.5">
         <div className="space-y-2.5">
-          {items.map((item, i) => (
-            <ItemCard key={item.id} item={item} showSac={showSac} showQty={showQty} currency={currency} ops={ops} />
+          {items.map((item) => (
+            <ItemCard key={item.id} item={item} showQty={showQty} currency={currency} ops={ops} />
           ))}
         </div>
       </Reorder.Group>
@@ -34,13 +33,11 @@ export function LineItemsSection({ items, showSac, showQty, currency, ops }: Pro
 
 function ItemCard({
   item,
-  showSac,
   showQty,
   currency,
   ops,
 }: {
   item: LineItem;
-  showSac: boolean;
   showQty: boolean;
   currency: string;
   ops: InvoiceApi['items'];
@@ -48,7 +45,7 @@ function ItemCard({
   const controls = useDragControls();
   const [open, setOpen] = useState(true);
   const amount = (showQty ? item.qty || 0 : 1) * (item.rate || 0);
-  const numCols = 1 + (showSac ? 1 : 0) + (showQty ? 1 : 0);
+  const numCols = 1 + (showQty ? 1 : 0);
 
   return (
     <Reorder.Item
@@ -120,14 +117,7 @@ function ItemCard({
                 onChange={(e) => ops.update(item.id, 'period', e.target.value)}
                 placeholder="e.g. Service period: March 2026"
               />
-              <div className={cn('grid gap-2', numCols === 3 ? 'grid-cols-3' : numCols === 2 ? 'grid-cols-2' : 'grid-cols-1')}>
-                {showSac && (
-                  <Field
-                    label="SAC/HSN"
-                    value={item.sac}
-                    onChange={(e) => ops.update(item.id, 'sac', e.target.value)}
-                  />
-                )}
+              <div className={cn('grid gap-2', numCols === 2 ? 'grid-cols-2' : 'grid-cols-1')}>
                 {showQty && (
                   <Field
                     label="Qty"

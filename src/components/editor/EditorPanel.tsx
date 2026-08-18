@@ -535,20 +535,10 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             <div>
               <div className="mb-1.5 flex items-center justify-between">
                 <span className="text-[12.5px] font-medium text-slate-500">Tax fields</span>
-                <div className="flex gap-1.5">
-                  <EyeChip label="GSTIN" on={state.showGstin} onToggle={(v) => update('showGstin', v)} />
-                  <EyeChip label="SAC/HSN" on={state.showSac} onToggle={(v) => update('showSac', v)} />
-                </div>
+                <EyeChip label="GSTIN" on={state.showGstin} onToggle={(v) => update('showGstin', v)} />
               </div>
-              {(state.showGstin || state.showSac) && (
-                <div className="grid grid-cols-2 gap-2.5">
-                  {state.showGstin && (
-                    <Field label="GSTIN" value={state.byGstin} onChange={(e) => update('byGstin', e.target.value)} />
-                  )}
-                  {state.showSac && (
-                    <Field label="SAC/HSN" value={state.bySac} onChange={(e) => update('bySac', e.target.value)} />
-                  )}
-                </div>
+              {state.showGstin && (
+                <Field label="GSTIN" value={state.byGstin} onChange={(e) => update('byGstin', e.target.value)} />
               )}
             </div>
             <CustomFields fields={state.byCustom} onChange={(f) => update('byCustom', f)} />
@@ -584,10 +574,16 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
             <TextArea label="Address" value={state.toAddress} onChange={(e) => update('toAddress', e.target.value)} />
             <div className="flex items-center justify-between">
               <span className="text-[12.5px] font-medium text-slate-500">Tax ID</span>
-              <EyeChip label="GSTIN" on={state.showGstin} onToggle={(v) => update('showGstin', v)} />
+              <div className="flex gap-1.5">
+                <EyeChip label="GSTIN" on={state.showGstin} onToggle={(v) => update('showGstin', v)} />
+                <EyeChip label="SAC/HSN" on={state.showSac} onToggle={(v) => update('showSac', v)} />
+              </div>
             </div>
             {state.showGstin && (
               <Field label="GSTIN" value={state.toGstin} onChange={(e) => update('toGstin', e.target.value)} />
+            )}
+            {state.showSac && (
+              <Field label="SAC/HSN" value={state.bySac} onChange={(e) => update('bySac', e.target.value)} />
             )}
             <CustomFields fields={state.toCustom} onChange={(f) => update('toCustom', f)} />
           </SectionCard>
@@ -595,12 +591,9 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
           <SectionCard value="items" icon={Package} title="Line Items" description="Services & products being billed" accent="purple" complete={state.items.length > 0 && state.items.every((i) => i.desc)}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[12.5px] font-medium text-slate-500">Columns</span>
-              <div className="flex gap-1.5">
-                <EyeChip label="SAC/HSN" on={state.showSac} onToggle={(v) => update('showSac', v)} />
-                <EyeChip label="Qty" on={state.showQty} onToggle={(v) => update('showQty', v)} />
-              </div>
+              <EyeChip label="Qty" on={state.showQty} onToggle={(v) => update('showQty', v)} />
             </div>
-            <LineItemsSection items={state.items} showSac={state.showSac} showQty={state.showQty} currency={state.currency} ops={items} />
+            <LineItemsSection items={state.items} showQty={state.showQty} currency={state.currency} ops={items} />
           </SectionCard>
 
           <SectionCard value="payment" icon={Landmark} title="Payment Details" description="Bank transfer information" accent="cyan" complete={Boolean(state.bankAcNo)}>

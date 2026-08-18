@@ -14,11 +14,8 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
   const useSignImage = s.signMode === 'upload' && s.signImage;
   const stampSrc = s.stampImage || DEFAULT_STAMP_SRC;
   const showTypedSignature = s.showSignature && !s.showStamp;
-  const sellerTaxLine = [
-    s.showGstin ? `GSTIN: ${s.byGstin}` : '',
-    s.showSac ? `SAC/HSN: ${s.bySac}` : '',
-  ].filter(Boolean);
-  const descWidth = 100 - 6 - 13 - 19 - (s.showSac ? 14 : 0) - (s.showQty ? 12 : 0);
+  const sellerTaxLine = [s.showGstin ? `GSTIN: ${s.byGstin}` : ''].filter(Boolean);
+  const descWidth = 100 - 6 - 13 - 19 - (s.showQty ? 12 : 0);
 
   return (
     <div id="invoice" ref={ref}>
@@ -102,6 +99,7 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
           <p>{s.toEmail}</p>
           <p style={{ whiteSpace: 'pre-line' }}>{s.toAddress}</p>
           {s.showGstin && <p className="gst">GSTIN: {s.toGstin}</p>}
+          {s.showSac && <p className="gst">SAC/HSN: {s.bySac}</p>}
           {s.toCustom.map(
             (f) =>
               (f.label || f.value) && (
@@ -118,7 +116,6 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
           <tr>
             <th style={{ width: '6%' }}>NO.</th>
             <th style={{ width: `${descWidth}%` }}>SERVICE DESCRIPTION</th>
-            {s.showSac && <th style={{ width: '14%' }}>SAC/HSN</th>}
             {s.showQty && <th style={{ width: '12%' }}>QTY</th>}
             <th style={{ width: '13%' }} className="right">RATE</th>
             <th style={{ width: '19%' }} className="right">AMOUNT</th>
@@ -134,7 +131,6 @@ const InvoicePreview = forwardRef<HTMLDivElement, { state: InvoiceState }>(({ st
                   <div className="desc">{item.desc}</div>
                   {item.period && <div className="period">{item.period}</div>}
                 </td>
-                {s.showSac && <td>{item.sac}</td>}
                 {s.showQty && <td>{item.qty}</td>}
                 <td className="right">{fmt2(item.rate)}</td>
                 <td className="right">{fmt2(amt)}</td>

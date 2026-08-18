@@ -29,7 +29,6 @@ function buildPayload(s: InvoiceState) {
       sub: s.bySub,
       address: s.byAddress,
       gstin: s.showGstin ? s.byGstin : null,
-      sac_hsn: s.showSac ? s.bySac : null,
       extra: s.byCustom,
     },
     client: {
@@ -39,12 +38,12 @@ function buildPayload(s: InvoiceState) {
       email: s.toEmail,
       address: s.toAddress,
       gstin: s.showGstin ? s.toGstin : null,
+      sac_hsn: s.showSac ? s.bySac : null,
       extra: s.toCustom,
     },
     items: s.items.map((i) => ({
       description: i.desc,
       period: i.period,
-      sac_hsn: s.showSac ? i.sac : null,
       qty: s.showQty ? i.qty : 1,
       rate: i.rate,
       amount: (s.showQty ? i.qty || 0 : 1) * (i.rate || 0),
