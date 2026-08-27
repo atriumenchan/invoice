@@ -217,20 +217,26 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     return () => clearTimeout(t);
   }, [session, canEdit, state.invoiceId, state.stampOpacity, state.stampRotate, state.stampFontSize, state.signFontSize]);
 
-  /* New invoices get the next free company-wide number (BG-IN-0004 if 0003 exists). */
+  /* New invoices (and templates opened as new invoices) get the next free number. */
   useEffect(() => {
     if (!session || state.invoiceId) return;
+    const pending = !state.invNo.trim() || state.invNo.trim().startsWith('#');
+    if (!pending) return;
     let cancelled = false;
     nextInvoiceNumber(state.invPrefix || 'INV')
       .then((n) => {
-        if (!cancelled) updateSilent('invNo', n);
+        if (cancelled) return;
+        updateSilent('invNo', n);
+        if (!state.bankRef.trim() || state.bankRef.trim().startsWith('#')) {
+          updateSilent('bankRef', n);
+        }
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, state.invoiceId, state.invPrefix]);
+  }, [session, state.invoiceId, state.invPrefix, state.invNo]);
 
   /* Cloud auto-save writes the full invoice to Supabase so admin edits are canonical. */
   const stateRef = useRef(state);

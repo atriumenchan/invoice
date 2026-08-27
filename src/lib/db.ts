@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { computeTotals } from './calc';
 import type { CustomField, EntityRegion, InvoiceState, InvoiceStatus } from '../types';
-import { hydrateInvoiceState } from '../state/useInvoice';
+import { detachCopiedInvoiceIdentity, hydrateInvoiceState } from '../state/useInvoice';
 import { isAdminEmail } from './permissions';
 
 export { isAdminEmail };
@@ -564,7 +564,9 @@ export async function cloneTemplateAsInvoice(t: TemplateRow, existingTitles: str
     n += 1;
     title = `${base} copy ${n}`;
   }
-  const state: InvoiceState = hydrateInvoiceState({ ...t.state, invoiceId: null }, { applyStampDefaults: false });
+  const state: InvoiceState = hydrateInvoiceState(detachCopiedInvoiceIdentity(t.state), {
+    applyStampDefaults: false,
+  });
   const { id, invoice_no, status } = await saveInvoiceToCloud(state, { title });
   return {
     id,
@@ -600,7 +602,7 @@ export async function saveTemplate(name: string, s: InvoiceState): Promise<void>
     user_id,
     name,
     issuer_id: s.issuerId,
-    state: { ...s, invoiceId: null },
+    state: detachCopiedInvoiceIdentity(s),
   });
   if (error) throw error;
 }

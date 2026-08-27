@@ -122,6 +122,28 @@ export function hydrateInvoiceState(
   return { ...DEFAULT_STATE, ...stamp, ...(partial ?? {}) };
 }
 
+/**
+ * Templates copy a finished invoice, including its number. Reusing that number
+ * cannot be saved as a new invoice. Mark the number as pending so save/editor
+ * allocate the next free one. If payment ref was the same as the invoice number,
+ * clear that too so it does not keep pointing at the old invoice.
+ */
+export function detachCopiedInvoiceIdentity(partial: Partial<InvoiceState>): Partial<InvoiceState> {
+  const prefix = (partial.invPrefix || 'INV').trim() || 'INV';
+  const oldNo = (partial.invNo || '').trim();
+  const oldBare = oldNo.replace(/^#+/, '');
+  const bankRef = (partial.bankRef || '').trim();
+  const bankBare = bankRef.replace(/^#+/, '');
+  const bankRefCopied = Boolean(oldBare) && (bankBare === oldBare || bankRef === oldNo);
+  return {
+    ...partial,
+    invoiceId: null,
+    status: 'draft',
+    invNo: `#${prefix}`,
+    ...(bankRefCopied ? { bankRef: `#${prefix}` } : {}),
+  };
+}
+
 export function useInvoice() {
   const [state, setState] = useState<InvoiceState>(newInvoiceState);
   const [dirty, setDirty] = useState(false);
@@ -251,7 +273,7 @@ export function useInvoice() {
   }, []);
 
   const loadTemplate = useCallback((partial: Partial<InvoiceState>) => {
-    setState(hydrateInvoiceState({ ...partial, invoiceId: null, status: 'draft' }, { applyStampDefaults: false }));
+    setState(hydrateInvoiceState(detachCopiedInvoiceIdentity(partial), { applyStampDefaults: false }));
     setDirty(true);
     setSavedAt(null);
   }, []);
