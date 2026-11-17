@@ -1,12 +1,9 @@
 import type { CustomField } from '../types';
 
 /**
- * Saved payment profile shown in the bank picker and applied when the
- * ADMEXO issuer is selected.
- *
- * Account fields come from the company bank-details document. Leave
- * accountNo blank until those figures are known — an incomplete profile
- * is never written onto an invoice.
+ * ADMEXO LLC Mercury account (Choice Financial Group).
+ * Domestic ACH/wires and USD international wires use this same account.
+ * The foreign-currency page is an intermediary route and is not stored here.
  */
 export interface BankPreset {
   label: string;
@@ -20,12 +17,16 @@ export interface BankPreset {
 
 export const ADMEXO_BANK: BankPreset = {
   label: 'ADMEXO',
-  beneficiary: 'ADMEXO',
-  bankName: '',
-  accountType: '',
-  accountNo: '',
-  ifsc: '',
-  custom: [],
+  beneficiary: 'ADMEXO LLC',
+  bankName: 'Choice Financial Group',
+  accountType: 'Checking',
+  accountNo: '202585555238',
+  ifsc: 'CHFGUS44021',
+  custom: [
+    { id: 'aba', label: 'ABA routing number', value: '091311229' },
+    { id: 'bank-address', label: 'Bank address', value: '4501 23rd Avenue S, Fargo, ND 58104, USA' },
+    { id: 'benef-address', label: 'Beneficiary address', value: '5830 East 2nd Street, Casper, WY 82609, USA' },
+  ],
 };
 
 export function isAdmexoIssuer(issuer: {
@@ -96,17 +97,20 @@ function isCompleteBank(bank: { accountNo: string; bankName: string; ifsc: strin
 /** Bank details to apply when the ADMEXO issuer is chosen. */
 export function bankForAdmexoIssuer(banks: BankSnapshot[]): AppliedBank | null {
   const saved = banks.find((b) => (b.label || '').trim().toLowerCase() === ADMEXO_BANK.label.toLowerCase());
-  if (saved) {
-    const applied = fromSnapshot(saved);
-    if (isCompleteBank(applied)) return applied;
-  }
-  if (!bankPresetReady(ADMEXO_BANK)) return null;
-  return fromPreset(ADMEXO_BANK, saved?.id ?? null);
+  if (bankPresetReady(ADMEXO_BANK)) return fromPreset(ADMEXO_BANK, saved?.id ?? null);
+  if (!saved) return null;
+  const applied = fromSnapshot(saved);
+  return isCompleteBank(applied) ? applied : null;
+}
+
+function isAdmexoBeneficiary(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return n === 'admexo' || n.startsWith('admexo ');
 }
 
 /** Picker / save label. The ADMEXO profile keeps that name. */
 export function bankAccountLabel(beneficiary: string, bankName: string, existingLabel?: string | null): string {
   if ((existingLabel || '').trim().toLowerCase() === ADMEXO_BANK.label.toLowerCase()) return ADMEXO_BANK.label;
-  if (beneficiary.trim().toLowerCase() === 'admexo') return ADMEXO_BANK.label;
+  if (isAdmexoBeneficiary(beneficiary)) return ADMEXO_BANK.label;
   return bankName.trim() || 'Bank account';
 }

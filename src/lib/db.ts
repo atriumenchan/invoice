@@ -178,17 +178,9 @@ export async function saveBank(s: InvoiceState): Promise<string> {
   return data.id as string;
 }
 
-/** Create the shared "ADMEXO" bank account once the profile has real account details. */
-export async function ensureAdmexoBank(issuers: IssuerRow[]): Promise<BankRow[]> {
-  const existing = await listBanks();
-  const label = ADMEXO_BANK.label.toLowerCase();
-  if (existing.some((b) => (b.label || '').trim().toLowerCase() === label)) return existing;
-  if (!bankPresetReady(ADMEXO_BANK)) return existing;
-  const user_id = await uid();
-  const issuer = issuers.find((i) => isAdmexoIssuer(i));
-  const { error } = await supabase.from('bank_accounts').insert({
-    user_id,
-    issuer_id: issuer?.id ?? null,
+function admexoBankRow(issuerId: string | null) {
+  return {
+    issuer_id: issuerId,
     label: ADMEXO_BANK.label,
     beneficiary: ADMEXO_BANK.beneficiary,
     bank_name: ADMEXO_BANK.bankName,
@@ -197,7 +189,37 @@ export async function ensureAdmexoBank(issuers: IssuerRow[]): Promise<BankRow[]>
     ifsc_swift: ADMEXO_BANK.ifsc,
     custom_fields: ADMEXO_BANK.custom,
     is_default: false,
-  });
+  };
+}
+
+function sameAdmexoBank(row: BankRow): boolean {
+  const custom = JSON.stringify(row.custom_fields ?? []);
+  return (
+    row.beneficiary === ADMEXO_BANK.beneficiary &&
+    row.bank_name === ADMEXO_BANK.bankName &&
+    row.account_type === ADMEXO_BANK.accountType &&
+    row.account_no === ADMEXO_BANK.accountNo &&
+    row.ifsc_swift === ADMEXO_BANK.ifsc &&
+    custom === JSON.stringify(ADMEXO_BANK.custom)
+  );
+}
+
+/** Keep the shared "ADMEXO" bank account aligned with the Mercury profile. */
+export async function ensureAdmexoBank(issuers: IssuerRow[]): Promise<BankRow[]> {
+  const existing = await listBanks();
+  if (!bankPresetReady(ADMEXO_BANK)) return existing;
+  const label = ADMEXO_BANK.label.toLowerCase();
+  const found = existing.find((b) => (b.label || '').trim().toLowerCase() === label);
+  const issuer = issuers.find((i) => isAdmexoIssuer(i));
+  const row = admexoBankRow(issuer?.id ?? found?.issuer_id ?? null);
+  if (found) {
+    if (sameAdmexoBank(found) && (found.issuer_id ?? null) === row.issuer_id) return existing;
+    const { error } = await supabase.from('bank_accounts').update(row).eq('id', found.id);
+    if (error) throw error;
+    return listBanks();
+  }
+  const user_id = await uid();
+  const { error } = await supabase.from('bank_accounts').insert({ ...row, user_id });
   if (error) throw error;
   return listBanks();
 }
