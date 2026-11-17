@@ -3,6 +3,7 @@ import { computeTotals } from './calc';
 import type { CustomField, EntityRegion, InvoiceState, InvoiceStatus } from '../types';
 import { detachCopiedInvoiceIdentity, hydrateInvoiceState } from '../state/useInvoice';
 import { isAdminEmail } from './permissions';
+import { ADMEXO_BANK, bankAccountLabel, bankPresetReady, isAdmexoIssuer } from './bankPresets';
 
 export { isAdminEmail };
 
@@ -44,6 +45,7 @@ export interface BankRow {
   ifsc_swift: string | null;
   custom_fields: CustomField[];
   is_default: boolean;
+  issuer_id?: string | null;
 }
 
 export interface InvoiceRow {
@@ -80,14 +82,28 @@ export async function listIssuers(): Promise<IssuerRow[]> {
   return data as IssuerRow[];
 }
 
+const DEFAULT_ISSUERS = [
+  { name: 'Betelgeuse Global', code: 'BG', brand: 'ADMEXO' as string | null, inv_prefix: 'BG-IN' },
+  { name: 'ADMEXO', code: 'ADX', brand: null as string | null, inv_prefix: 'ADX-IN' },
+];
+
 export async function ensureDefaultIssuers(): Promise<IssuerRow[]> {
   const existing = await listIssuers();
-  if (existing.length) return existing;
+  const missing = DEFAULT_ISSUERS.filter(
+    (w) =>
+      !existing.some(
+        (e) =>
+          e.inv_prefix === w.inv_prefix ||
+          e.code === w.code ||
+          e.name.trim().toLowerCase() === w.name.toLowerCase()
+      )
+  );
+  if (!missing.length) return existing;
   const user_id = await uid();
   const base = {
     user_id,
     address: '2101, E-Square, Sector 96, Noida, U.P. 201304, India',
-    region: 'IN',
+    region: 'IN' as const,
     currency: 'INR',
     tax_id_label: 'GSTIN',
     tax_id: '09CBJPM0018A1Z6',
@@ -95,10 +111,7 @@ export async function ensureDefaultIssuers(): Promise<IssuerRow[]> {
     footer_regions: 'USA | DUBAI | INDIA | UK',
     footer_web: 'admexo.com',
   };
-  const { error } = await supabase.from('issuers').insert([
-    { ...base, name: 'Betelgeuse Global', code: 'BG', brand: 'ADMEXO', inv_prefix: 'BG-IN' },
-    { ...base, name: 'ADMEXO', code: 'ADX', brand: null, inv_prefix: 'ADX-IN' },
-  ]);
+  const { error } = await supabase.from('issuers').insert(missing.map((w) => ({ ...base, ...w })));
   if (error) throw error;
   return listIssuers();
 }
@@ -140,8 +153,14 @@ export async function listBanks(): Promise<BankRow[]> {
 
 export async function saveBank(s: InvoiceState): Promise<string> {
   const user_id = await uid();
+  let existingLabel: string | null = null;
+  if (s.bankId) {
+    const { data, error } = await supabase.from('bank_accounts').select('label').eq('id', s.bankId).maybeSingle();
+    if (error) throw error;
+    existingLabel = data?.label ?? null;
+  }
   const row = {
-    label: s.bankName || 'Bank account',
+    label: bankAccountLabel(s.bankBenef, s.bankName, existingLabel),
     beneficiary: s.bankBenef,
     bank_name: s.bankName,
     account_type: s.bankAcType,
@@ -157,6 +176,30 @@ export async function saveBank(s: InvoiceState): Promise<string> {
   const { data, error } = await supabase.from('bank_accounts').insert({ ...row, user_id }).select('id').single();
   if (error) throw error;
   return data.id as string;
+}
+
+/** Create the shared "ADMEXO" bank account once the profile has real account details. */
+export async function ensureAdmexoBank(issuers: IssuerRow[]): Promise<BankRow[]> {
+  const existing = await listBanks();
+  const label = ADMEXO_BANK.label.toLowerCase();
+  if (existing.some((b) => (b.label || '').trim().toLowerCase() === label)) return existing;
+  if (!bankPresetReady(ADMEXO_BANK)) return existing;
+  const user_id = await uid();
+  const issuer = issuers.find((i) => isAdmexoIssuer(i));
+  const { error } = await supabase.from('bank_accounts').insert({
+    user_id,
+    issuer_id: issuer?.id ?? null,
+    label: ADMEXO_BANK.label,
+    beneficiary: ADMEXO_BANK.beneficiary,
+    bank_name: ADMEXO_BANK.bankName,
+    account_type: ADMEXO_BANK.accountType,
+    account_no: ADMEXO_BANK.accountNo,
+    ifsc_swift: ADMEXO_BANK.ifsc,
+    custom_fields: ADMEXO_BANK.custom,
+    is_default: false,
+  });
+  if (error) throw error;
+  return listBanks();
 }
 
 /* ---------- invoice numbering (centralized across every user) ---------- */

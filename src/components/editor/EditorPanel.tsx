@@ -30,6 +30,7 @@ import type { InvoiceApi } from '../../state/useInvoice';
 import { computeTotals, fmt2 } from '../../lib/calc';
 import { useAuth } from '../../state/AuthContext';
 import {
+  ensureAdmexoBank,
   ensureDefaultIssuers,
   listBanks,
   listClients,
@@ -46,6 +47,7 @@ import {
   type ClientRow,
   type IssuerRow,
 } from '../../lib/db';
+import { bankForAdmexoIssuer, isAdmexoIssuer } from '../../lib/bankPresets';
 import {
   canChangeInvoiceNumber,
   canDownloadPdf,
@@ -173,9 +175,10 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     if (!session) return;
     (async () => {
       try {
-        setIssuers(await ensureDefaultIssuers());
+        const nextIssuers = await ensureDefaultIssuers();
+        setIssuers(nextIssuers);
         setClients(await listClients());
-        setBanks(await listBanks());
+        setBanks(await ensureAdmexoBank(nextIssuers));
       } catch (e) {
         console.error('Failed to load saved records', e);
       }
@@ -301,6 +304,19 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     update('byCustom', i.custom_fields ?? []);
     update('footRegions', i.footer_regions ?? '');
     update('footWeb', i.footer_web ?? '');
+    if (isAdmexoIssuer(i)) {
+      const bank = bankForAdmexoIssuer(banks);
+      if (bank) {
+        update('bankId', bank.id);
+        update('bankBenef', bank.beneficiary);
+        update('bankName', bank.bankName);
+        update('bankAcType', bank.accountType);
+        update('bankAcNo', bank.accountNo);
+        update('bankIfsc', bank.ifsc);
+        update('bankCustom', bank.custom);
+        update('showBank', true);
+      }
+    }
     applyEntity(i.region);
   };
 
