@@ -11,6 +11,7 @@ import {
   LayoutTemplate,
   NotebookPen,
   Package,
+  PenLine,
   PenTool,
   Plus,
   Receipt,
@@ -34,6 +35,7 @@ import {
   ensureDefaultIssuers,
   listBanks,
   listClients,
+  renameBank,
   saveBank,
   saveClient,
   saveInvoiceToCloud,
@@ -105,6 +107,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   const [issuers, setIssuers] = useState<IssuerRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [banks, setBanks] = useState<BankRow[]>([]);
+  const [bankLabel, setBankLabel] = useState('');
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudMsg, setCloudMsg] = useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -184,6 +187,12 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
       }
     })();
   }, [session]);
+
+  useEffect(() => {
+    if (!state.bankId || bankLabel.trim()) return;
+    const saved = banks.find((b) => b.id === state.bankId);
+    if (saved) setBankLabel(saved.label || saved.bank_name || '');
+  }, [banks, state.bankId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!session || state.invoiceId) return;
@@ -315,6 +324,8 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
         update('bankIfsc', bank.ifsc);
         update('bankCustom', bank.custom);
         update('showBank', true);
+        const saved = bank.id ? banks.find((b) => b.id === bank.id) : undefined;
+        setBankLabel(saved?.label || 'ADMEXO');
       }
     }
     applyEntity(i.region);
@@ -340,6 +351,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   const applyBank = (id: string) => {
     if (!id) {
       update('bankId', null);
+      setBankLabel('');
       return;
     }
     const b = banks.find((x) => x.id === id);
@@ -351,6 +363,7 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
     update('bankAcNo', b.account_no ?? '');
     update('bankIfsc', b.ifsc_swift ?? '');
     update('bankCustom', b.custom_fields ?? []);
+    setBankLabel(b.label || b.bank_name || '');
   };
 
   const onSaveClient = async () => {
@@ -365,13 +378,35 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
   };
 
   const onSaveBank = async () => {
+    const name = bankLabel.trim() || state.bankName.trim();
+    if (!name) {
+      alert('Enter a template name.');
+      return;
+    }
     try {
-      const id = await saveBank(state);
+      const id = await saveBank(state, name);
       update('bankId', id);
+      setBankLabel(name);
       setBanks(await listBanks());
-      flash('Bank account saved');
+      flash(`Bank account saved as “${name}”`);
     } catch (e) {
       alert('Could not save bank account: ' + (e as Error).message);
+    }
+  };
+
+  const onRenameBank = async () => {
+    if (!state.bankId) return;
+    const name = bankLabel.trim();
+    if (!name) {
+      alert('Enter a template name.');
+      return;
+    }
+    try {
+      await renameBank(state.bankId, name);
+      setBanks(await listBanks());
+      flash(`Renamed to “${name}”`);
+    } catch (e) {
+      alert('Could not rename bank account: ' + (e as Error).message);
     }
   };
 
@@ -627,24 +662,41 @@ export function EditorPanel({ inv }: { inv: InvoiceApi }) {
               <Switch label="Show bank details on invoice" checked={state.showBank} onChange={(v) => update('showBank', v)} />
             </div>
             {session && (
-              <div className="flex items-end gap-2">
-                <div className="min-w-0 flex-1">
-                  <Select label="Saved bank accounts" value={state.bankId ?? ''} onChange={(e) => applyBank(e.target.value)}>
-                    <option value="">— New / manual —</option>
-                    {banks.map((b) => (
-                      <option key={b.id} value={b.id}>{b.label || b.bank_name || 'Bank account'}</option>
-                    ))}
-                  </Select>
+              <>
+                <Field
+                  label="Template name"
+                  value={bankLabel}
+                  placeholder="Name shown in the list, e.g. HDFC Bank"
+                  onChange={(e) => setBankLabel(e.target.value)}
+                />
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Select label="Saved bank accounts" value={state.bankId ?? ''} onChange={(e) => applyBank(e.target.value)}>
+                      <option value="">— New / manual —</option>
+                      {banks.map((b) => (
+                        <option key={b.id} value={b.id}>{b.label || b.bank_name || 'Bank account'}</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onRenameBank}
+                    disabled={!state.bankId}
+                    title="Rename the selected bank template"
+                    className="mb-0.5 inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-[#E8ECF4] bg-white px-3 text-[12px] font-semibold text-slate-600 transition-colors duration-150 hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <PenLine size={13} /> Rename
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onSaveBank}
+                    title="Save current details under the template name"
+                    className="mb-0.5 inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-[#E8ECF4] bg-white px-3 text-[12px] font-semibold text-slate-600 transition-colors duration-150 hover:border-brand hover:text-brand"
+                  >
+                    <Save size={13} /> Save
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={onSaveBank}
-                  title="Save current details as a bank account"
-                  className="mb-0.5 inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-[#E8ECF4] bg-white px-3 text-[12px] font-semibold text-slate-600 transition-colors duration-150 hover:border-brand hover:text-brand"
-                >
-                  <Save size={13} /> Save
-                </button>
-              </div>
+              </>
             )}
             <Field label="Beneficiary" value={state.bankBenef} onChange={(e) => update('bankBenef', e.target.value)} />
             <div className="grid grid-cols-2 gap-2.5">

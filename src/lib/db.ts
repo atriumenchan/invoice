@@ -3,7 +3,7 @@ import { computeTotals } from './calc';
 import type { CustomField, EntityRegion, InvoiceState, InvoiceStatus } from '../types';
 import { detachCopiedInvoiceIdentity, hydrateInvoiceState } from '../state/useInvoice';
 import { isAdminEmail } from './permissions';
-import { ADMEXO_BANK, bankAccountLabel, bankPresetReady, isAdmexoIssuer } from './bankPresets';
+import { ADMEXO_BANK, bankPresetReady, isAdmexoIssuer } from './bankPresets';
 
 export { isAdminEmail };
 
@@ -151,16 +151,11 @@ export async function listBanks(): Promise<BankRow[]> {
   return data as BankRow[];
 }
 
-export async function saveBank(s: InvoiceState): Promise<string> {
+export async function saveBank(s: InvoiceState, label: string): Promise<string> {
   const user_id = await uid();
-  let existingLabel: string | null = null;
-  if (s.bankId) {
-    const { data, error } = await supabase.from('bank_accounts').select('label').eq('id', s.bankId).maybeSingle();
-    if (error) throw error;
-    existingLabel = data?.label ?? null;
-  }
+  const name = label.trim() || s.bankName.trim() || 'Bank account';
   const row = {
-    label: bankAccountLabel(s.bankBenef, s.bankName, existingLabel),
+    label: name,
     beneficiary: s.bankBenef,
     bank_name: s.bankName,
     account_type: s.bankAcType,
@@ -176,6 +171,13 @@ export async function saveBank(s: InvoiceState): Promise<string> {
   const { data, error } = await supabase.from('bank_accounts').insert({ ...row, user_id }).select('id').single();
   if (error) throw error;
   return data.id as string;
+}
+
+export async function renameBank(id: string, label: string): Promise<void> {
+  const name = label.trim();
+  if (!name) throw new Error('Enter a template name');
+  const { error } = await supabase.from('bank_accounts').update({ label: name }).eq('id', id);
+  if (error) throw error;
 }
 
 function admexoBankRow(issuerId: string | null) {
@@ -209,11 +211,16 @@ export async function ensureAdmexoBank(issuers: IssuerRow[]): Promise<BankRow[]>
   const existing = await listBanks();
   if (!bankPresetReady(ADMEXO_BANK)) return existing;
   const label = ADMEXO_BANK.label.toLowerCase();
-  const found = existing.find((b) => (b.label || '').trim().toLowerCase() === label);
+  const found =
+    existing.find((b) => (b.label || '').trim().toLowerCase() === label) ??
+    existing.find((b) => (b.account_no || '').trim() === ADMEXO_BANK.accountNo);
   const issuer = issuers.find((i) => isAdmexoIssuer(i));
-  const row = admexoBankRow(issuer?.id ?? found?.issuer_id ?? null);
+  const row = {
+    ...admexoBankRow(issuer?.id ?? found?.issuer_id ?? null),
+    label: (found?.label || '').trim() || ADMEXO_BANK.label,
+  };
   if (found) {
-    if (sameAdmexoBank(found) && (found.issuer_id ?? null) === row.issuer_id) return existing;
+    if (sameAdmexoBank(found) && (found.label || '') === row.label && (found.issuer_id ?? null) === row.issuer_id) return existing;
     const { error } = await supabase.from('bank_accounts').update(row).eq('id', found.id);
     if (error) throw error;
     return listBanks();

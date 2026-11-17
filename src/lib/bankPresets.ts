@@ -96,21 +96,12 @@ function isCompleteBank(bank: { accountNo: string; bankName: string; ifsc: strin
 
 /** Bank details to apply when the ADMEXO issuer is chosen. */
 export function bankForAdmexoIssuer(banks: BankSnapshot[]): AppliedBank | null {
-  const saved = banks.find((b) => (b.label || '').trim().toLowerCase() === ADMEXO_BANK.label.toLowerCase());
+  const saved =
+    banks.find((b) => (b.label || '').trim().toLowerCase() === ADMEXO_BANK.label.toLowerCase()) ??
+    banks.find((b) => (b.account_no || '').trim() === ADMEXO_BANK.accountNo);
   if (bankPresetReady(ADMEXO_BANK)) return fromPreset(ADMEXO_BANK, saved?.id ?? null);
   if (!saved) return null;
   const applied = fromSnapshot(saved);
   return isCompleteBank(applied) ? applied : null;
 }
 
-function isAdmexoBeneficiary(name: string): boolean {
-  const n = name.trim().toLowerCase();
-  return n === 'admexo' || n.startsWith('admexo ');
-}
-
-/** Picker / save label. The ADMEXO profile keeps that name. */
-export function bankAccountLabel(beneficiary: string, bankName: string, existingLabel?: string | null): string {
-  if ((existingLabel || '').trim().toLowerCase() === ADMEXO_BANK.label.toLowerCase()) return ADMEXO_BANK.label;
-  if (isAdmexoBeneficiary(beneficiary)) return ADMEXO_BANK.label;
-  return bankName.trim() || 'Bank account';
-}
